@@ -356,6 +356,19 @@ inline bool is_ok(Move m){
 	return (from_sq(m) != to_sq(m)); // checks for MOVE_NULL and MOVE_NONE primarily
 }
 
+inline char rank_char_of(const Square& sq){
+	return char(rank_of(sq) + '1');
+}
+
+inline char file_char_of(const Square& sq){
+	return char(file_of(sq) + 'a');
+}
+
+inline std::ostream& operator<<(std::ostream& ss, const Square& sq){
+	ss << file_char_of(sq) << rank_char_of(sq);
+	return ss;
+}
+
 /* This is a pseudo-random number generator described in http://vigna.di.unimi.it/ftp/papers/xorshift.pdf */
 class RNG {
 	uint64_t s;

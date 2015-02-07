@@ -114,6 +114,14 @@ inline Bitboard shift_bb(Bitboard b){
 			: 0;
 }
 
+inline Bitboard shift_bb(Bitboard b, Square Delta){
+	// This shifts the bitboard in a certain variable direction. //
+	return  Delta == DELTA_N  ?  b               << 8 : Delta == DELTA_S  ?  b             >> 8
+			: Delta == DELTA_NE ? (b & ~FileHBB) << 9 : Delta == DELTA_SE ? (b & ~FileHBB) >> 7
+			: Delta == DELTA_NW ? (b & ~FileABB) << 7 : Delta == DELTA_SW ? (b & ~FileABB) >> 9
+			: 0;
+}
+
 inline Bitboard adjacent_files_bb(File f){
 	// Returns the BB of adjacent files to given one. //
 	return AdjacentFilesBB[f];
@@ -215,6 +223,17 @@ inline Bitboard attacks_bb(Piece pc, Square s, Bitboard occupied){
 			return StepAttacksBB[pc][s];
 	}
 }
+
+const int index64[64] = {
+	0, 47,  1, 56, 48, 27,  2, 60,
+	57, 49, 41, 37, 28, 16,  3, 61,
+	54, 58, 35, 52, 50, 42, 21, 44,
+	38, 32, 29, 23, 17, 11,  4, 62,
+	46, 55, 26, 59, 40, 36, 15, 53,
+	34, 51, 20, 43, 31, 22, 10, 45,
+	25, 39, 14, 33, 19, 30,  9, 24,
+	13, 18,  8, 12,  7,  6,  5, 63
+};
 
 inline Square lsb(Bitboard b){
 	Bitboard idx;
