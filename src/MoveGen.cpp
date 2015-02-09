@@ -31,6 +31,38 @@ std::string Moves::format<false>(Move m){
 	return ret;
 }
 
+Move Moves::parse_coord(std::string move, const Board& pos){
+	if(move.length() < 4 || move.length() > 5) return MOVE_NONE;
+	Rank r1, r2;
+	File f1, f2;
+	Square from, to;
+	PieceType prom = NO_PIECE_TYPE;
+	f1 = File(move[0] - 'a'), f2 = File(move[2] - 'a');
+	r1 = Rank(move[1] - '1'), r2 = Rank(move[3] - '1');
+	from = make_square(r1, f1), to = make_square(r2, f2);
+	Move m = make_move(from, to);
+	if(move.length() == 5){
+		char pr = move[4];
+		if(pr == 'b') prom = BISHOP;
+		else if(pr == 'n') prom = KNIGHT;
+		else if(pr == 'r') prom = ROOK;
+		else if(pr == 'q') prom = QUEEN;
+		m = make<PROMOTION>(from, to, prom);
+	}
+	for(MoveList<LEGAL> it(pos); *it; it++){
+		if(type_of(*it) != CASTLING){
+			if(*it == m) return *it;
+		} else {
+			// For castling, the user might enter "e1g1" or such. //
+			Square kto = (to < from) ? (from - Square(2)) : (from + Square(2));
+			if((from_sq(*it) == from) && (kto == to)){
+				return *it;
+			}
+		}
+	}
+	return MOVE_NONE;
+}
+
 // inline Move make_move(Square from, Square to)
 // template<MoveType T> inline Move make(Square from, Square to, PieceType pt = KNIGHT)
 

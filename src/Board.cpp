@@ -2,8 +2,9 @@
 #include "Bitboards.h"
 #include "Board.h"
 #include "MoveGen.h"
+#include "Evaluation.h"
 
-Value PieceValue[PHASE_NB][PIECE_NB] = {
+Value PieceValue[PHASE_NB][PIECE_TYPE_NB] = {
 	{ VAL_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg },
 	{ VAL_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg } 
 }; // material value by piece
@@ -196,6 +197,8 @@ std::ostream& operator<<(std::ostream& ss, const Board& pos){
 		while(ch) ss << pop_lsb(&ch) << " ";
 	}
 	ss << "\n";
+	// Evaluation //
+	ss << "evaluation: " << Eval::to_cp(Eval::evaluate_verbose(pos)) << "\n";
 	return (ss << "\n");
 }
 
@@ -382,14 +385,7 @@ void Board::do_move(Move m, BoardState& new_st){
 	assert(is_ok(from));
 	assert(is_ok(to));
 	Piece pc = at(from);
-	if(side_of(pc) != us || (pCount[WHITE][ALL_PIECES] > 16) || (pCount[BLACK][ALL_PIECES] > 16)){
-		printf("for doing ");
-		std::cout << Moves::format<false>(m) << std::endl;
-		std::cout << *this;
-		assert(side_of(pc) == us);
-		assert(pCount[WHITE][ALL_PIECES] > 16);
-		assert(pCount[BLACK][ALL_PIECES] > 16);
-	}
+	assert(side_of(pc) == us && (pCount[WHITE][ALL_PIECES] <= 16) && (pCount[BLACK][ALL_PIECES] <= 16));
 	PieceType pt = type_of(pc);
 	PieceType capd = type_of(at(to));
 	if((type_of(m) != CASTLING) && st->castling && (capd == ROOK)){
@@ -398,12 +394,6 @@ void Board::do_move(Move m, BoardState& new_st){
 		int affected = 0;
 		if(rel_from == SQ_A1) affected = WHITE_OOO;
 		else if(rel_from == SQ_H1) affected = WHITE_OO;
-		/*
-		std::cout << *this << Moves::format<false>(m) << std::endl;
-		if(!affected) std::cout << "un";
-		std::cout << "affected " << rel_from << std::endl;
-		getchar();
-		*/
 		st->castling &= ~(affected << (2 * them)); // kill the side that lost its rook's rights
 	}
 	if(type_of(m) == NORMAL){
@@ -419,12 +409,6 @@ void Board::do_move(Move m, BoardState& new_st){
 				int affected = 0;
 				if(rel_from == SQ_A1) affected = WHITE_OOO;
 				else if(rel_from == SQ_H1) affected = WHITE_OO;
-				/*
-				std::cout << *this << Moves::format<false>(m) << std::endl;
-				if(!affected) std::cout << "un";
-				std::cout << "affected " << rel_from << std::endl;
-				getchar();
-				*/
 				new_cast &= ~(affected << (2 * us)); // kill that sides rights
 			}
 			st->castling = new_cast;
@@ -582,13 +566,7 @@ void Board::undo_move(Move m){
 		}
 	}
 	to_move = ~to_move;
-	if((pCount[WHITE][ALL_PIECES] > 16) || (pCount[BLACK][ALL_PIECES] > 16)){
-		printf("for undoing ");
-		std::cout << Moves::format<false>(m) << std::endl;
-		std::cout << *this;
-		assert(pCount[WHITE][ALL_PIECES] <= 16);
-		assert(pCount[BLACK][ALL_PIECES] <= 16);
-	}
+	assert((pCount[WHITE][ALL_PIECES] <= 16) && (pCount[BLACK][ALL_PIECES] <= 16));
 }
 	
 

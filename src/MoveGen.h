@@ -8,6 +8,7 @@
 namespace Moves {
 	void init(void);
 	template<bool Algebraic> std::string format(Move m);
+	Move parse_coord(std::string move, const Board& pos);
 }
 
 struct ActMove {

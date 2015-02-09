@@ -1,9 +1,13 @@
 #include <iostream>
 #include <cstdio>
+#include <cstdlib>
+#include <cmath>
 #include "Common.h"
 #include "Bitboards.h"
 #include "Board.h"
 #include "MoveGen.h"
+#include "Search.h"
+#include "Evaluation.h"
 
 template<bool Root>
 uint64_t perft(Board& pos, Depth depth){
@@ -28,12 +32,8 @@ uint64_t perft(Board& pos, Depth depth){
 	return nodes;
 }
 
-int main(int argc, char** argv){
-	Bitboards::init();
-	Board::init();
-	Moves::init();
+int test_misc(void){
 	Board pos;
-	printf("Init'ing...\n");
 	//pos.init_from("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 	//pos.init_from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -");
 	//pos.init_from("rnbqkb1r/pp1p1ppp/2p5/4P3/2B5/8/PPP1NnPP/RNBQK2R w KQkq - 0 6");
@@ -106,8 +106,79 @@ int main(int argc, char** argv){
 	pos.init_from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/1R2K2R b Kkq - 1 2");
 	std::cout << pos;
 	*/
+	return 1;
+}
+
+int main(int argc, char** argv){
+	Bitboards::init();
+	Board::init();
+	Moves::init();
+	Eval::init();
+	Board pos;
+	printf("Init'ing...\n");
+	pos.init_from("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+	Side us = BLACK;
+	while(true){
+		std::cout << pos;
+		if(!MoveList<LEGAL>(pos).size()){
+			if(pos.checkers()){
+				if(pos.side_to_move() == us) std::cout << BOLDCYAN << "You win!";
+				else std::cout << BOLDRED << "You lose!";
+				std::cout << RESET << "\n";
+			} else {
+				std::cout << BOLDCYAN << "Draw by stalemate!\n" << RESET;
+			}
+			break;
+		}
+		if(pos.side_to_move() == us){
+			// Our turn //
+			// TODO: Search
+			// Random for now //
+			Move m = Search::search_root(pos);
+			if(m != MOVE_NONE){
+				BoardState* st = new BoardState();
+				pos.do_move(m, *st);
+			} else {
+				std::cout << BOLDRED << "Computer resigns.\n" << RESET;
+				break;
+			}
+		} else {
+			// Their turn //
+			Move theirs = MOVE_NONE;
+			while(true){
+				std::cout << "Please enter your move: ";
+				std::string inp;
+				std::getline(std::cin, inp);
+				Move m = Moves::parse_coord(inp, pos);
+				if(m != MOVE_NONE){
+					theirs = m;
+					break;
+				} else {
+					std::cerr << REDCOLOR << "Invalid move entered! Please try again.\n\n" << RESET;
+				}
+			}
+			BoardState* st = new BoardState();
+			pos.do_move(theirs, *st);
+		}
+	}
 	return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

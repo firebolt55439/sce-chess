@@ -105,8 +105,8 @@ enum CastlingRight {
 };
 
 enum Phase {
-	PHASE_MIDGAME = 0,
-	PHASE_ENDGAME = 128,
+	PHASE_ENDGAME,
+	PHASE_MIDGAME = 128,
 	MG = 0, EG = 1, PHASE_NB = 2
 };
 
@@ -184,17 +184,29 @@ enum Score {
 	SCORE_INT_MAX = INT_MAX
 };
 
+enum ScaleFactor {
+	SCALE_FACTOR_DRAW    = 0,
+	SCALE_FACTOR_ONEPAWN = 48,
+	SCALE_FACTOR_NORMAL  = 64,
+	SCALE_FACTOR_MAX     = 128,
+	SCALE_FACTOR_NONE    = 255
+};
+
 inline Score make_score(Value mg, Value eg){
-	return Score((eg << 16) + mg);
+	return Score((mg << 16) + eg);
+}
+
+inline Score make_score(int mg, int eg){
+	return make_score(Value(mg), Value(eg));
 }
 
 inline Value mg_value(Score sc){
-	union { uint16_t u; uint16_t s; } mg = { uint16_t(unsigned(sc + 0x8000) >> 16) };
-	return Value(mg.u);
+	union { uint16_t u; int16_t s; } mg = { uint16_t(unsigned(sc + 0x8000) >> 16) };
+	return Value(mg.s);
 }
 
 inline Value eg_value(Score sc){
-	union { uint16_t u; uint16_t s; } eg = { uint16_t(unsigned(sc + 0x8000) >> 16) };
+	union { uint16_t u; int16_t s; } eg = { uint16_t(unsigned(sc)) };
 	return Value(eg.s);
 }
 
@@ -251,9 +263,9 @@ inline Score operator/(Score s, int i){
 	return make_score(mg_value(s) / i, eg_value(s) / i);
 }
 
-extern Value PieceValue[PHASE_NB][PIECE_NB];
+extern Value PieceValue[PHASE_NB][PIECE_TYPE_NB];
 
-inline Value piece_val_of(Phase ph, Piece pt){
+inline Value piece_val_of(Phase ph, PieceType pt){
 	return PieceValue[ph][pt];
 }
 
