@@ -7,6 +7,8 @@
 #include <cctype>
 #include <cstdlib>
 #include <climits>
+#include <ctime>
+#include <vector>
 
 #define RESET   "\033[0m"
 #define BOLDCOLOR    "\033[1m" 		 /* Bold */
@@ -407,6 +409,33 @@ public:
 	}
 };
 
+/* This is a general-purpose explicit-size Hash Table. */
+/*
+template<class Entry, int Size>
+struct HashTable {
+  HashTable() : table(Size, Entry()) {}
+  Entry* operator[](Key key) { return &table[(uint32_t)key & (Size - 1)]; }
+
+private:
+  std::vector<Entry> table;
+};*/
+
+template<class Entry, int Size>
+struct HashTable {
+	private:
+		std::vector<Entry> table;
+	public:
+		HashTable(void) : table(Size, Entry()) {
+			//
+		}
+	
+		Entry* operator[](Key key){
+			return &table[(uint32_t)(key) & (Size - 1)]; // cheaper than a modulo instruction
+		}
+};
+
+/* These are different bitcount types depending on use-case. */
+
 enum BitCountType {
 	CNT_64,
 	CNT_64_MAX15,
@@ -461,6 +490,14 @@ inline int popcount<CNT_32_MAX15>(Bitboard b){
 template<>
 inline int popcount<CNT_HW_POPCNT>(Bitboard b){
 	return __builtin_popcountll(b);
+}
+
+/* Time management functions. */
+
+inline int64_t get_system_time_msec(void){
+	timeval t;
+	gettimeofday(&t, NULL);
+	return (t.tv_sec * 1000LL + t.tv_usec / 1000);
 }
 
 #endif // #ifndef COM_INC

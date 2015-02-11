@@ -13,7 +13,9 @@ struct CheckInfo {
 };
 
 struct BoardState {
-	Key key; // hash key
+	Key key; // Zobrist hash key for board
+	Key pawn_key; // Zobrist hash key for only pawns
+	Key material_key; // Zobrist hash key for only material
 	int ply; // fullmove ct but starts from 0
 	int fifty_ct; // halfmove ct
 	int castling; // castling rights mask
@@ -54,6 +56,7 @@ class Board {
 		
 		void init_from(const std::string& fen); // init from FEN
 		std::string fen(void) const; // get FEN
+		bool is_draw(void) const; // check if the position is drawn (aside from stalemate)
 		
 		// Pieces //
 		Side side_to_move(void) const; // side to move
@@ -89,15 +92,22 @@ class Board {
 		template<PieceType Pt> Bitboard attacks_from(Square sq) const; // get attacks from square by piece type (side-ind.)
 		template<PieceType Pt> Bitboard attacks_from(Square sq, Side c) const; // get attacks from square by piece type and side (side-ind.)
 		
+		// SEE
+		Value see(Move m) const; // SEE a move
+		Value see_sign(Move m) const; // SEE the sign of the move (pos./neg.)
+		
 		// Moves //
 		Piece moved_piece(Move m) const; // piece moved
+		bool is_capture(Move m) const; // check if move is a capture
 		bool legal(Move m, Bitboard pinned) const; // check if a move is legal
 		bool gives_check(Move m, CheckInfo& ci) const; // check if a move gives check
 		void do_move(Move m, BoardState& new_st); // do a move and get a new state (as well as updating current state with prev. link)
 		void undo_move(Move m); // undo a move
 		
 		// Hashes //
-		Key key(void) const; // Zobrist hash
+		Key key(void) const; // Board hash
+		Key pawn_key(void) const; // Pawn hash
+		Key material_key(void) const; // Material hash
 		
 		// Other //
 		int get_ply(void){ return st->ply; }
@@ -196,8 +206,20 @@ inline Bitboard Board::attacks_from(Piece pc, Square s) const {
 	return attacks_bb(pc, s, byType[ALL_PIECES]);
 }
 
+inline bool Board::is_capture(Move m) const {
+	return (type_of(m) != CASTLING) && (!empty(to_sq(m)) || (type_of(m) == ENPASSANT));
+}
+
 inline Key Board::key(void) const {
 	return st->key;
+}
+
+inline Key Board::pawn_key(void) const {
+	return st->pawn_key;
+}
+
+inline Key Board::material_key(void) const {
+	return st->material_key;
 }
 
 inline Piece Board::moved_piece(Move m) const {

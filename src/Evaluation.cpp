@@ -3,6 +3,7 @@
 #include "Board.h"
 #include "MoveGen.h"
 #include "Evaluation.h"
+#include "Pawns.h"
 
 #define S(mg, eg) make_score(mg, eg)
 #define SS(g) make_score(g, g)
@@ -15,16 +16,19 @@ const struct Weight { int mg, eg; } Weights[] = {
 	{289, 344}, {233, 201}, {221, 273}, {46, 0}, {321, 0}
 }; // weights by [above enum from Mobility to KingSafety]
 
+Score PSQTable[SIDE_NB][PIECE_TYPE_NB][SQUARE_NB]; // used for piece-square table scores
+
 struct EvalInfo {
 	// This is a structure that collects information computed by evaluation
 	// so effort is not wasted on repeat collections of data.
-	// TODO: Material/pawn (hash) tables
+	// TODO: Material (hash) tables
 	Bitboard attackedBy[SIDE_NB][PIECE_TYPE_NB]; // attacked by [side][piece type (or ALL_PIECES)]
 	Bitboard kingRing[SIDE_NB]; // the squares which we are watching for attacks against each side's king
 	int kingAttkCount[SIDE_NB]; // the number of pieces of the given color attacking a square in the enemy's king ring
 	int kingAttkWeight[SIDE_NB]; // we "weight" each king attacker (e.g. queen attack > bishop attack)
 	int kingAdjCount[SIDE_NB]; // the number of attacks to squares directly next to the king of the given side
 	Bitboard pinned[SIDE_NB]; // pinned pieces by side
+	Pawns::PawnEntry* pe; // pawn entry from hash table
 };
 
 // Material Imbalance and Values //
@@ -87,6 +91,7 @@ inline std::string score_str(Score s){
 }
 
 void Eval::init(void){
+	// Init KingDanger Array //
 	const double MaxSlope = 7.5; // maximum instantaneous change b/w two points (e.g. derivative at a point)
 	const double Peak = 1280.0; // max amount
 	double t = 0.0;
@@ -97,14 +102,14 @@ void Eval::init(void){
 		t = std::min(Peak, std::min(0.025 * i * i, t + MaxSlope));
 		KingDanger[i] = apply_weight(make_score(int(t), 0), Weights[KingSafety]);
 	}
-}
-
-template<Side Us>
-inline Bitboard pawn_attacks_all(const Board& pos){
-	Bitboard b = pos.pieces(Us, PAWN);
-	const Square dE = (Us == WHITE) ? DELTA_NE : DELTA_SE;
-	const Square dW = (Us == WHITE) ? DELTA_NW : DELTA_SW;
-	return (shift_bb<dE>(b) | shift_bb<dW>(b));
+	// Init PSQTable //
+	for(PieceType pt = PAWN; pt <= KING; pt++){
+		Score v = make_score(PieceValue[MG][pt], PieceValue[EG][pt]);
+		for(Square s = SQ_A1; s <= SQ_H8; s++){
+			PSQTable[WHITE][pt][s] = v + Eval::PieceSquareTable[pt][s];
+			PSQTable[BLACK][pt][~s] = -(v + Eval::PieceSquareTable[pt][s]);
+		}
+	}
 }
 
 template<Side Us>
@@ -113,7 +118,7 @@ void init_eval_info(const Board& pos, EvalInfo& ei){
 	const Side Them = (Us == WHITE) ? BLACK : WHITE;
 	ei.pinned[Us] = pos.pinned(Us);
 	Bitboard king_zone = ei.attackedBy[Them][KING] = pos.attacks_from<KING>(pos.king_sq(Them)); 
-	ei.attackedBy[Us][ALL_PIECES] = ei.attackedBy[Us][PAWN] = pawn_attacks_all<Us>(pos);
+	ei.attackedBy[Us][ALL_PIECES] = ei.attackedBy[Us][PAWN] = ei.pe->pawnAttks[Us];
 	// TODO: Only init king safety tables if we have over a certain material threshold
 	ei.kingRing[Them] = king_zone | shift_bb<Us == WHITE ? DELTA_S : DELTA_N>(king_zone); // their king ring has their king zone plus their zone "pawn pushed"
 	king_zone &= ei.attackedBy[Us][PAWN]; // now find anything controlled by a pawn of ours
@@ -122,20 +127,20 @@ void init_eval_info(const Board& pos, EvalInfo& ei){
 }
 
 template<Side Us, bool Verbose>
-int material_imbalance(const Board& pos){
+int material_imbalance(const int pcount[][SIDE_NB]){
 	const Side Them = (Us == WHITE ? BLACK : WHITE);
 	int bonus = 0;
 	//printf("Side %d.\n", int(Us));
 	for(PieceType i = PAWN; i <= QUEEN; i++){
-		if(!pos.count(Us, i)) continue;
+		if(!pcount[i][Us]) continue;
 		//printf("Checking piece %c...\n", PieceChar[make_piece(WHITE, i)]);
 		int v = LinearMaterial[i]; // scale factor, or rather, value of this piece type given the current material
 		for(PieceType j = PAWN; j <= QUEEN; j++){
 			//printf("Against %c.\n", PieceChar[make_piece(BLACK, j)]);
-			v += (QuadraticOurs[i][j] * pos.count(Us, j)) + (QuadraticTheirs[i][j] * pos.count(Them, j));
+			v += (QuadraticOurs[i][j] * pcount[j][Us]) + (QuadraticTheirs[i][j] * pcount[j][Them]);
 			//printf("V - Now: %d\n", v);
 		}
-		bonus += pos.count(Us, i) * v;
+		bonus += pcount[i][Us] * v;
 		//printf("Bonus is now %d.\n", bonus);
 	}
 	int16_t cast = int16_t(bonus);
@@ -148,15 +153,7 @@ Score psq_score(const Board& pos){
 	while(pcs){
 		Square s = pop_lsb(&pcs);
 		Piece pc = pos.at(s);
-		Side c = side_of(pc);
-		PieceType pt = type_of(pc);
-		Score psq = Eval::PieceSquareTable[pt][relative_square(c, s)];
-		if(c == WHITE) score += psq;
-		else {
-			// TODO: Consider incrementally updated psq score, startup tables
-			// with flipping for black + white - optimize here
-			score += make_score(-mg_value(psq), -eg_value(psq));
-		}
+		score += PSQTable[side_of(pc)][type_of(pc)][s];
 	}
 	return score;
 }
@@ -242,7 +239,7 @@ Score evaluate_king(const Board& pos, EvalInfo& ei){
 	// Safe Queen Contact Checks //
 	Bitboard b = undefended & ei.attackedBy[Them][QUEEN] & ~pos.pieces(Them);
 	if(b){
-		b &= ei.attackedBy[Us][PAWN] | ei.attackedBy[Us][KNIGHT] | ei.attackedBy[Us][BISHOP] | ei.attackedBy[Us][ROOK]; // has to be supported by something
+		b &= ei.attackedBy[Them][PAWN] | ei.attackedBy[Them][KNIGHT] | ei.attackedBy[Them][BISHOP] | ei.attackedBy[Them][ROOK]; // has to be supported by something
 		if(b){
 			attack_danger += QueenContactCheck * popcount<Max15>(b);
 		}
@@ -251,7 +248,7 @@ Score evaluate_king(const Board& pos, EvalInfo& ei){
 	b = undefended & ei.attackedBy[Them][ROOK] & ~pos.pieces(Them); // now for rook contact checks
 	b &= PseudoAttacks[ROOK][ksq]; // make sure it actually gives check (rather than going to a "corner" of the zone)
 	if(b){
-		b &= ei.attackedBy[Us][PAWN] | ei.attackedBy[Us][KNIGHT] | ei.attackedBy[Us][BISHOP] | ei.attackedBy[Us][QUEEN]; // has to be supported by something
+		b &= ei.attackedBy[Them][PAWN] | ei.attackedBy[Them][KNIGHT] | ei.attackedBy[Them][BISHOP] | ei.attackedBy[Them][QUEEN]; // has to be supported by something
 		if(b){
 			attack_danger += RookContactCheck * popcount<Max15>(b);
 		}
@@ -264,7 +261,6 @@ Score evaluate_king(const Board& pos, EvalInfo& ei){
 	// Queen Safe Checks //
 	b = (b1 | b2) & ei.attackedBy[Them][QUEEN];
 	if(b){
-		if(Verbose) std::cerr << Bitboards::pretty(b) << std::endl << Bitboards::pretty(ei.attackedBy[Us][PAWN]);
 		attack_danger += QueenCheck * popcount<Max15>(b);
 	}
 	// Rook Safe Checks //
@@ -299,6 +295,7 @@ Value do_evaluate(const Board& pos){
 	Phase game_phase;
 	// TODO: Endgames
 	// Init Eval Info //
+	ei.pe = Pawns::probe(pos);
 	init_eval_info<WHITE>(pos, ei);
 	init_eval_info<BLACK>(pos, ei);
 	ei.attackedBy[WHITE][ALL_PIECES] |= ei.attackedBy[WHITE][KING];
@@ -315,22 +312,38 @@ Value do_evaluate(const Board& pos){
 	game_phase = Phase(((total_npm - EndgameLimit) * PHASE_MIDGAME) / (MidgameLimit - EndgameLimit)); // scale phase b/w midgame and endgame, truncate decimal point
 	if(Verbose) printf("Game phase: %d\n", game_phase);
 	// TODO: Mobility area, space evaluation
-	score += psq_score(pos); // piece-square tables
-	if(Verbose) printf("PSQT Score: %s\n", score_str(score).c_str());
-	score += evaluate_pieces<KNIGHT, WHITE, Verbose>(pos, ei);
-	if(Verbose) printf("+Pieces: %s\n", score_str(score).c_str());
-	score += evaluate_king<WHITE, Verbose>(pos, ei) - evaluate_king<BLACK, Verbose>(pos, ei);
-	if(Verbose) printf("+King: %s\n", score_str(score).c_str());
 	// TODO: Threats, passed pawns, etc.
 	// Material Factoring //
-	Value imb = Value((material_imbalance<WHITE, Verbose>(pos) - material_imbalance<BLACK, Verbose>(pos)) / 16);
+	const int pcounts[PIECE_TYPE_NB - 1][SIDE_NB] = {
+		{}, // NO_PIECE_TYPE
+		{ pos.count(WHITE, PAWN), pos.count(BLACK, PAWN) },
+		{ pos.count(WHITE, KNIGHT), pos.count(BLACK, KNIGHT) },
+		{ pos.count(WHITE, BISHOP), pos.count(BLACK, BISHOP) },
+		{ pos.count(WHITE, ROOK), pos.count(BLACK, ROOK) },
+		{ pos.count(WHITE, QUEEN), pos.count(BLACK, QUEEN) }
+	};
+	Value imb = Value((material_imbalance<WHITE, Verbose>(pcounts) - material_imbalance<BLACK, Verbose>(pcounts)) / 16);
 	score += SS(imb);
 	if(Verbose) printf("Material Imbalance: %d\n", imb);
+	// Piece-Square Tables //
+	score += psq_score(pos); // piece-square tables
+	if(Verbose) printf("+PSQT Score: %s\n", score_str(score).c_str());
+	// Pawns //
+	score += apply_weight(ei.pe->pawn_score(), Weights[PawnStructure]);
+	if(Verbose) printf("+Pawns Score: %s\n", score_str(score).c_str());
+	// Piece-Specific Evaluation //
+	score += evaluate_pieces<KNIGHT, WHITE, Verbose>(pos, ei);
+	if(Verbose) printf("+Pieces: %s\n", score_str(score).c_str());
+	// King Safety //
+	score += evaluate_king<WHITE, Verbose>(pos, ei) - evaluate_king<BLACK, Verbose>(pos, ei);
+	if(Verbose) printf("+King: %s\n", score_str(score).c_str());
 	// Return //
 	// TODO: ScaleFactor's and specialized evaluation functions
 	ScaleFactor scale_factor = SCALE_FACTOR_NORMAL; // TODO
 	Value final_score = (mg_value(score) * int(game_phase)) + (eg_value(score) * int(PHASE_MIDGAME - game_phase) * scale_factor / SCALE_FACTOR_NORMAL);
+	final_score /= int(PHASE_MIDGAME);
 	if(Verbose) printf("Final score: %d\n", final_score);
+	// TODO: Tempo
 	return (pos.side_to_move() == WHITE) ? (final_score) : (-final_score);
 }
 

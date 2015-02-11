@@ -57,7 +57,7 @@ extern Bitboard BetweenBB[SQUARE_NB][SQUARE_NB]; // all squares between two squa
 extern Bitboard LineBB[SQUARE_NB][SQUARE_NB]; // all horizontal/vertical lines between two squares
 extern Bitboard DistanceRingBB[SQUARE_NB][8];
 extern Bitboard ForwardBB[SIDE_NB][SQUARE_NB]; // everything ahead of a square in a line
-extern Bitboard PassedPawnMask[SIDE_NB][SQUARE_NB]; // is basically ForwardBB OR'd with PawnAttackSpan
+extern Bitboard PassedPawnMask[SIDE_NB][SQUARE_NB]; // is basically everything ahead of the pawn on the given file and adjaent files
 extern Bitboard PawnAttackSpan[SIDE_NB][SQUARE_NB]; // self-explanatory
 extern Bitboard PseudoAttacks[PIECE_TYPE_NB][SQUARE_NB]; // pseudo attacks (incredibly useful for evaluation)
 
@@ -150,8 +150,9 @@ inline Bitboard forward_bb(Side c, Square s){
 }
 
 inline Bitboard pawn_attack_span(Side c, Square s){
-	// Returns the two squares a pawn can attack of a given side from a certain
-	// square.
+	// Returns the squares ahead of the adjacent files
+	// for a pawn of a given side (used for testing
+	// backwards pawns, etc.).
 	return PawnAttackSpan[c][s];
 }
 
@@ -249,7 +250,7 @@ inline Square frontmost_sq(Side c, Bitboard b){
 	return (c == WHITE ? msb(b) : lsb(b));
 }
 
-inline Square  backmost_sq(Side c, Bitboard b){ 
+inline Square backmost_sq(Side c, Bitboard b){ 
 	return (c == WHITE ? lsb(b) : msb(b));
 }
 

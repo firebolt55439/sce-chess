@@ -76,6 +76,11 @@ ActMove* generate_sliders_knight(const Board& pos, ActMove* list, Side us){
 		Square from = pop_lsb(&pcs);
 		Piece on = pos.at(from);
 		Bitboard possibs = pos.attacks_from(on, from) & (~pos.pieces(us)) & ~pos.pieces(KING); // don't want to take our own pieces
+		if(T == CAPTURES){
+			possibs &= pos.pieces(~us); // have to capture
+		} else if(T == NON_CAPTURES){
+			possibs &= ~pos.all(); // can't capture anything
+		}
 		while(possibs){
 			Square to = pop_lsb(&possibs);
 			if((T != EVASIONS) || (to == chksq) || (between_bb(ksq, chksq) & to)){
@@ -89,8 +94,6 @@ ActMove* generate_sliders_knight(const Board& pos, ActMove* list, Side us){
 template<GenType T>
 ActMove* generate_king(const Board& pos, ActMove* list, Side us){
 	// This generates all king moves (other than castling). //
-	// TODO: Some tests should be performed to check if the move can 
-	// quickly be ruled out.
 	Square from = pos.king_sq(us);
 	Bitboard possibs = pos.attacks_from<KING>(from) & (~pos.pieces(us));
 	if(T == EVASIONS){
@@ -98,6 +101,10 @@ ActMove* generate_king(const Board& pos, ActMove* list, Side us){
 		while(chks){ // just quickly and cheaply rule out spots under check
 			possibs &= ~(between_bb(from, pop_lsb(&chks)));
 		}
+	} else if(T == CAPTURES){
+		possibs &= pos.pieces(~us); // have to capture
+	} else if(T == NON_CAPTURES){
+		possibs &= ~pos.all(); // no captures, period
 	}
 	while(possibs){
 		Square to = pop_lsb(&possibs);
@@ -108,7 +115,7 @@ ActMove* generate_king(const Board& pos, ActMove* list, Side us){
 
 template<GenType T>
 ActMove* generate_castles(const Board& pos, ActMove* list, Side us){
-	assert(T != EVASIONS); // a castling move cannot be an evasion since we cannot castle under check
+	assert((T != EVASIONS) && (T != CAPTURES)); // a castling move cannot be an evasion since we cannot castle under check and cannot capture anything
 	const Square ksq = pos.king_sq(us);
 	for(CastlingRight on = WHITE_OO; on <= BLACK_OOO; on = CastlingRight(on << 1)){
 		if(pos.can_castle(on)){
@@ -145,14 +152,19 @@ ActMove* generate_pawns(const Board& pos, ActMove* list, Side us){
 		Square from = pop_lsb(&pcs);
 		const Bitboard orig = SquareBB[from];
 		// First, generate pawn captures and en passants. //
-		Bitboard possibs = pos.attacks_from<PAWN>(from, us) & (pos.pieces(~us) | ep_mask) & (~pos.pieces(KING)); // can only be a capture or an e.p.
-		// Then, generate pawn pushes (single and double). //
-		Bitboard push = shift_bb(orig, delta) & ~pos.all(); // single push
-		if(relative_rank(us, from) == RANK_2){ // double push
-			push |= shift_bb(push, delta) & ~pos.all(); // shifts 'push' so if no single push was possible, neither will any double push be
+		Bitboard possibs = 0;
+		if(T != NON_CAPTURES){ // since these are always captures
+			possibs |= pos.attacks_from<PAWN>(from, us) & (pos.pieces(~us) | ep_mask) & (~pos.pieces(KING)); // can only be a capture or an e.p.
 		}
-		assert(!(push & pos.all()));
-		possibs |= push;
+		// Then, generate pawn pushes (single and double). //
+		if(T != CAPTURES){ // since pawn pushes cannot be captures
+			Bitboard push = shift_bb(orig, delta) & ~pos.all(); // single push
+			if(relative_rank(us, from) == RANK_2){ // double push
+				push |= shift_bb(push, delta) & ~pos.all(); // shifts 'push' so if no single push was possible, neither will any double push be
+			}
+			assert(!(push & pos.all()));
+			possibs |= push;
+		}
 		// And, fill up the move list. //
 		while(possibs){
 			Square to = pop_lsb(&possibs);
@@ -218,6 +230,25 @@ template<>
 ActMove* generate_moves<EVASIONS>(const Board& pos, ActMove* list){
 	Side us = pos.side_to_move();
 	list = generate_evasions<EVASIONS>(pos, list, us);
+	return list;
+}
+
+template<>
+ActMove* generate_moves<CAPTURES>(const Board& pos, ActMove* list){
+	Side us = pos.side_to_move();
+	list = generate_sliders_knight<CAPTURES>(pos, list, us);
+	list = generate_king<CAPTURES>(pos, list, us);
+	list = generate_pawns<CAPTURES>(pos, list, us);
+	return list;
+}
+
+template<>
+ActMove* generate_moves<NON_CAPTURES>(const Board& pos, ActMove* list){
+	Side us = pos.side_to_move();
+	list = generate_sliders_knight<NON_CAPTURES>(pos, list, us);
+	list = generate_king<NON_CAPTURES>(pos, list, us);
+	list = generate_pawns<NON_CAPTURES>(pos, list, us);
+	list = generate_castles<NON_CAPTURES>(pos, list, us);
 	return list;
 }
 

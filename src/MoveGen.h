@@ -13,12 +13,19 @@ namespace Moves {
 
 struct ActMove {
 	Move move; // the move itself
-	Value score; // move score (used for move ordering)
+	Value value; // move score (used for move ordering)
 };
+
+inline bool operator<(const ActMove& a, const ActMove& b){
+	// For use by sorting algorithms in the STL or such. //
+	return a.value < b.value;
+}
 
 enum GenType {
 	NON_EVASIONS, // not check evasions
 	EVASIONS, // check evasions
+	CAPTURES, // only captures
+	NON_CAPTURES, // only non-captures
 	LEGAL // driver
 };
 

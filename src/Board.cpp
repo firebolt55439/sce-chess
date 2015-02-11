@@ -9,6 +9,14 @@ Value PieceValue[PHASE_NB][PIECE_TYPE_NB] = {
 	{ VAL_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg } 
 }; // material value by piece
 
+namespace Hashing {
+	// For hashing purposes. //
+	Key psq[SIDE_NB][PIECE_TYPE_NB][SQUARE_NB]; // hash keys by [side][piece type][square]
+	Key enp[FILE_NB]; // en passant by [file]
+	Key castling[CASTLING_RIGHT_NB]; // castling rights by [mask of castling rights]
+	Key side; // xor'd in/out whenever the side to move changes
+}
+
 const std::string PieceChar(" PNBRQK  pnbrqk");
 
 void Board::clear(void){
@@ -18,7 +26,28 @@ void Board::clear(void){
 }
 
 void Board::init(void){
-	// TODO: Init Zobrist hash keys, etc.
+	RNG rng(148957);
+	for(Side c = WHITE; c <= BLACK; c++){
+		for(PieceType pt = PAWN; pt <= KING; pt++){
+			for(Square s = SQ_A1; s <= SQ_H8; s++){
+				Hashing::psq[c][pt][s] = rng.rand<Key>();
+			}
+		}
+	}
+	for(File f = FILE_A; f <= FILE_H; f++){
+		Hashing::enp[f] = rng.rand<Key>();
+	}
+	for(CastlingRight cr = NO_CASTLING; cr <= ANY_CASTLING; cr++){
+		Hashing::castling[cr] = rng.rand<Key>();
+	}
+	Hashing::side = rng.rand<Key>();
+}
+
+Board& Board::operator=(const Board& pos){
+	std::memcpy(this, &pos, sizeof(Board));
+	orig_st = *st;
+	st = &orig_st;
+	return *this;
 }
 
 Bitboard Board::attackers_to(Square s, Bitboard occ) const {
@@ -86,25 +115,38 @@ void Board::update_state(BoardState* st){
 	// Should *only* be used when setting up the board. //
 	assert(st != NULL);
 	assert(st == &orig_st);
-	st->key = 0;
+	st->key = st->pawn_key = st->material_key = 0;
 	st->capd = NO_PIECE_TYPE;
-	/*
-	Key key; // hash key
-	int ply; // fullmove ct
-	int fifty_ct; // halfmove ct
-	int castling; // castling rights mask
-	Square epsq; // e.p. square if/a (or SQ_NONE)
-	Bitboard checkers; // everything giving check
-	Bitboard pinned; // pinned pieces
-	Bitboard lined; // everything in line that can give check if a piece is removed
-	Bitboard kattk[PIECE_TYPE_NB]; // if king was a superpiece, this stores its attacks
-	BoardState* prev; // previous board state
-	PieceType capd; // captured piece type (for undoing move)
-	*/
 	Square ksq = king_sq(to_move);
 	st->checkers = attackers_to(ksq, byType[ALL_PIECES]) & pieces(~to_move);
 	st->pinned = pinned(to_move);
 	st->lined = lined(to_move);
+	// And now for regenerating hash keys. //
+	// First, Zobrist hash for entire board. //
+	for(Bitboard b = all(); b; ){
+		Square s = pop_lsb(&b);
+		Piece pc = at(s);
+		st->key ^= Hashing::psq[side_of(pc)][type_of(pc)][s];
+	}
+	if(ep_sq() != SQ_NONE) st->key ^= Hashing::enp[file_of(ep_sq())];
+	st->key ^= Hashing::castling[st->castling];
+	if(to_move == BLACK) st->key ^= Hashing::side;
+	// Then, Zobrist hash for only pawns. //
+	for(Bitboard b = pieces(PAWN); b; ){
+		Square s = pop_lsb(&b);
+		Piece pc = at(s);
+		st->pawn_key ^= Hashing::psq[side_of(pc)][PAWN][s];
+	}
+	// And finally, Zobrist hash for material regardless of location. //
+	for(Side c = WHITE; c <= BLACK; c++){
+		for(PieceType pt = PAWN; pt <= KING; pt++){
+			for(int i = 0; i < pCount[c][pt]; i++){
+				// Since the number of pieces of one type can obviously never
+				// exceed 64, we can do this.
+				st->material_key ^= Hashing::psq[c][pt][i];
+			}
+		}
+	}
 }
 
 const Bitboard castling_paths[9] = { // get castling paths for *individual* castling types (e.g. only WHITE_OOO set)
@@ -199,6 +241,9 @@ std::ostream& operator<<(std::ostream& ss, const Board& pos){
 	ss << "\n";
 	// Evaluation //
 	ss << "evaluation: " << Eval::to_cp(Eval::evaluate_verbose(pos)) << "\n";
+	ss << "board hash: " << pos.key() << "\n";
+	ss << "pawn hash: " << pos.pawn_key() << "\n";
+	ss << "material hash: " << pos.material_key() << "\n";
 	return (ss << "\n");
 }
 
@@ -301,6 +346,24 @@ std::string Board::fen(void) const {
 	return ss.str();
 }
 
+bool Board::is_draw(void) const {
+	if(st->fifty_ct > 99 && (!checkers() || MoveList<LEGAL>(*this).size())){ 
+		// Note: Using MoveList size is OK since it is unlikely enough that
+		// the halfmove count is above 99 anyway, so it is a rare case.
+		return true; // drawn by 50-move rule
+	}
+	BoardState* stp = st; // will be used to store previous states
+	for(int i = 2, e = std::min(st->fifty_ct, st->ply); i <= e; i += 2){
+		// Can only be the exact same during the same person's move, hence
+		// the i += 2 above.
+		stp = stp->prev->prev; // find the one 1 full move ago
+		if(stp->key == st->key){
+			return true; // Drawn at first repetition
+		}
+	}
+	return false;
+}
+
 bool Board::legal(Move m, Bitboard pinned) const {
 	// Checks if a given move 'm' is legal. //
 	// Note: Only checks for leaving king in
@@ -363,21 +426,26 @@ bool Board::gives_check(Move m, CheckInfo& ci) const {
 void Board::do_move(Move m, BoardState& new_st){
 	assert(is_ok(m));
 	assert(st != &new_st); // or we'll have a problem
-	// TODO: Hash keys
 	// Save checking info //
 	CheckInfo ci(*this);
 	bool is_checking = gives_check(m, ci);
 	const Bitboard our_lined = st->lined; // for *our* discover checks
 	// Get the new state set up //
+	Key key = st->key; // save current Zobrist key (so we can modify this, and eventually set the current one to this)
+	const int orig_castling = st->castling; // save original castling rights (so we can XOR it out later and update the castling rights in the hash key)
 	std::memcpy(&new_st, st, sizeof(BoardState));
 	new_st.prev = st;
-	new_st.epsq = SQ_NONE; // reset e.p. square
+	if(new_st.epsq != SQ_NONE){
+		key ^= Hashing::enp[file_of(new_st.epsq)];
+		new_st.epsq = SQ_NONE; // reset e.p. square
+	}
 	new_st.capd = NO_PIECE_TYPE; // no piece type was captured
 	new_st.key = 0; // reset Zobrist key
 	st = &new_st;
 	// Increment plies, etc. //
 	++st->ply;
 	++st->fifty_ct;
+	key ^= Hashing::side; // we can do this now - it was coming anyway...
 	bool should_reset_50 = false; // if we should set the halfmove counter to 0
 	// Now do the move. //
 	Side us = to_move, them = ~us;
@@ -387,7 +455,23 @@ void Board::do_move(Move m, BoardState& new_st){
 	Piece pc = at(from);
 	assert(side_of(pc) == us && (pCount[WHITE][ALL_PIECES] <= 16) && (pCount[BLACK][ALL_PIECES] <= 16));
 	PieceType pt = type_of(pc);
-	PieceType capd = type_of(at(to));
+	PieceType capd = (type_of(m) != ENPASSANT) ? type_of(at(to)) : PAWN;
+	if((capd != NO_PIECE_TYPE) && (type_of(m) != CASTLING)){
+		st->capd = capd;
+		Square s = to;
+		should_reset_50 = true;
+		if(capd == PAWN){
+			if(type_of(m) == ENPASSANT){
+				s = to - pawn_push(us);
+				assert(type_of(at(s)) == PAWN);
+				assert(side_of(at(s)) == them);
+			}
+			st->pawn_key ^= Hashing::psq[them][PAWN][s];
+		}
+		remove_piece(capd, them, s);
+		key ^= Hashing::psq[them][capd][s];
+		st->material_key ^= Hashing::psq[them][capd][pCount[them][capd]]; // only pCount[...] instead of that minus 1 since remove_piece() above already decremented it by 1
+	}
 	if((type_of(m) != CASTLING) && st->castling && (capd == ROOK)){
 		// If we captured a rook, update castling rights now. //
 		Square rel_from = relative_square(them, to);
@@ -413,41 +497,31 @@ void Board::do_move(Move m, BoardState& new_st){
 			}
 			st->castling = new_cast;
 		}
-		// Now, if it is a capture, remove the captured piece. //
-		if(capd != NO_PIECE_TYPE){
-			st->capd = capd;
-			remove_piece(capd, them, to);
-			should_reset_50 = true;
-		}
 		// Then, move the piece. //
 		move_piece(pt, us, from, to);
+		key ^= Hashing::psq[us][pt][from] ^ Hashing::psq[us][pt][to]; // moved a piece
 		// Now, handle pawn e.p. and halfmove reset //
 		if(pt == PAWN){
 			should_reset_50 = true;
 			if(distance<Rank>(from, to) == 2){ // if it is a pawn double push
 				st->epsq = (from + to) / 2; // the midpoint between from and to is the e.p. square
+				key ^= Hashing::enp[file_of(st->epsq)]; // e.p. file
 			}
 		}
 	} else if(type_of(m) == ENPASSANT){
-		// Capture the e.p. pawn //
-		should_reset_50 = true; // pawn capture
-		Square capd_pawn = to - pawn_push(us); // where we are going minus one rank basically
-		assert(type_of(at(capd_pawn)) == PAWN);
-		remove_piece(PAWN, them, capd_pawn);
-		st->capd = PAWN;
 		// Move our pawn //
 		move_piece(pt, us, from, to);
+		key ^= Hashing::psq[us][PAWN][from] ^ Hashing::psq[us][PAWN][to];
 	} else if(type_of(m) == PROMOTION){
 		// A promotion can be a capture, so handle that. //
 		should_reset_50 = true; // the pawn moved, so we have to reset this
-		if(capd != NO_PIECE_TYPE){
-			st->capd = capd;
-			remove_piece(capd, them, to);
-		}
 		// Now remove the moving pawn. //
 		remove_piece(pt, us, from);
 		// And put in the promoted piece. //
-		put_piece(promotion_type(m), us, to);
+		PieceType prom = promotion_type(m);
+		put_piece(prom, us, to);
+		key ^= Hashing::psq[us][PAWN][from] ^ Hashing::psq[us][prom][to];
+		st->material_key ^= Hashing::psq[us][PAWN][pCount[us][PAWN]] ^ Hashing::psq[us][prom][pCount[us][prom] - 1]; // the decrementing/incrementing is due to remove/put_piece() already being called above
 	} else if(type_of(m) == CASTLING){
 		assert(pt == KING);
 		if(capd != ROOK){
@@ -464,20 +538,29 @@ void Board::do_move(Move m, BoardState& new_st){
 		assert(is_ok(rto));
 		// Now move the king //
 		move_piece(KING, us, kfrom, kto);
+		key ^= Hashing::psq[us][KING][kfrom] ^ Hashing::psq[us][KING][kto];
 		move_piece(ROOK, us, rfrom, rto);
+		key ^= Hashing::psq[us][ROOK][rfrom] ^ Hashing::psq[us][ROOK][rto];
 		// And finish off castling rights. //
 		st->castling &= ~((WHITE_OO | WHITE_OOO) << (2 * us));
+	}
+	if(pt == PAWN){
+		st->pawn_key ^= Hashing::psq[us][PAWN][from];
+		if(type_of(m) != PROMOTION) st->pawn_key ^= Hashing::psq[us][PAWN][to]; // since in promotion, the pawn "dissappears"
 	}
 	// Now, update the checkers, etc. bitboards. //
 	st->checkers = 0;
 	st->pinned = pinned(them);
 	st->lined = lined(them);
+	if(st->castling != orig_castling){
+		key ^= Hashing::castling[orig_castling] ^ Hashing::castling[st->castling];
+	}
+	st->key = key; // update board hash key
 	if(ci.ksq != king_sq(them)){
 		std::cout << *this << Moves::format<false>(m) << std::endl;
 		assert(ci.ksq == king_sq(them));
 	}
 	if(is_checking){
-		//std::cout << "Move " << Moves::format<false>(m) << " was checking." << std::endl;
 		if(type_of(m) == NORMAL){
 			// We can optimize here. //
 			if(ci.kattk[pt] & to){ // For direct checks
@@ -568,10 +651,95 @@ void Board::undo_move(Move m){
 	to_move = ~to_move;
 	assert((pCount[WHITE][ALL_PIECES] <= 16) && (pCount[BLACK][ALL_PIECES] <= 16));
 }
+
+template<int Pt>
+PieceType min_attacker(const Bitboard* bb, const Square& to, const Bitboard& stm_attackers, Bitboard& occ, Bitboard& attackers){
+	// Finds minimum attacker and updates bitboards accordingly. //
+	Bitboard b = stm_attackers & bb[Pt]; // find anything we can capture with of the given piece type
+	if(!b){
+		// Nothing doing with this piece type - let's try the next. //
+		return min_attacker<Pt + 1>(bb, to, stm_attackers, occ, attackers);
+	}
+	occ ^= b & ~(b - 1); // reset LSB - remove attacker just found from occupancy
+	if((Pt == PAWN) || (Pt == BISHOP) || (Pt == QUEEN)){ // diagonal
+		attackers |= attacks_bb<BISHOP>(to, occ) & (bb[BISHOP] | bb[QUEEN]); // add in anything behind that
+	}
+	if((Pt == ROOK) || (Pt == QUEEN)){ // vertical/horizontal
+		attackers |= attacks_bb<ROOK>(to, occ) & (bb[ROOK] | bb[QUEEN]);
+	}
+	attackers &= occ; // only occupied squares - just make sure
+	return PieceType(Pt);
+}
+
+template<>
+PieceType min_attacker<KING>(const Bitboard* bb, const Square& to, const Bitboard& stm_attackers, Bitboard& occ, Bitboard& attackers){
+	return KING; // we are done here anyway, so we don't have to update the bitboards
+}
 	
-
-
-
+Value Board::see(Move m) const {
+	Square from, to;
+	Bitboard occ, attackers, stm_attackers; // stm = side to move
+	Value swapList[32]; // a swap list tallying up the exchanges made
+	int ind = 1; // index we are on in the swap list
+	PieceType capd; // the piece type captured
+	Side stm; // the side to move
+	assert(is_ok(m));
+	from = from_sq(m);
+	to = to_sq(m);
+	swapList[0] = PieceValue[MG][at(to)]; // the first piece taken
+	stm = side_of(at(from)); // therefore, side to move is side of moving piece
+	occ = all() ^ from; // occupancy is initially without the from square of the first move made
+	if(type_of(m) == CASTLING){
+		// Castling can never be SEE negative since it must be valid and 
+		// the rook cannot end up under attack since otherwise the king
+		// would have moved through check.
+		return VAL_ZERO;
+	} else if(type_of(m) == ENPASSANT){
+		occ ^= to - pawn_push(stm); // get rid of the captured pawn
+		swapList[0] = PieceValue[MG][PAWN]; // a pawn was taken first
+	}
+	attackers = attackers_to(to, occ) & occ; // get all valid attackers that can recapture
+	stm = ~stm; // flip side to move
+	stm_attackers = attackers & pieces(stm); // get all aggressors from side to recapture
+	if(!stm_attackers){
+		// If the opposing side cannot recapture, then we are done. //
+		return swapList[0];
+	}
+	// OK, there are defenders of that square. Shame. //
+	capd = type_of(at(from)); // because this piece is just about to be captured
+	do {
+		assert(ind < 32); // otherwise something is very, very wrong
+		swapList[ind] = -swapList[ind - 1] + PieceValue[MG][capd]; // cumulative score, subtract other side's gains
+		capd = min_attacker<PAWN>(byType, to, stm_attackers, occ, attackers);
+		if(capd == KING){
+			if(stm_attackers == attackers){
+				++ind; // looks like the king can take it after all
+			}
+			break;
+		}
+		stm = ~stm;
+		stm_attackers = attackers & pieces(stm);
+		++ind;
+	} while (stm_attackers); // as long as recapturing is possible
+	// We have the swaplist now, so let's find the best possible score for the side that started the exchange
+	// and return it.
+	while(--ind){
+		swapList[ind - 1] = std::min(-swapList[ind], swapList[ind - 1]); // since the exchange can be stopped at any point by either person, so they want the least-worst option
+	}
+	return swapList[0]; // everything else gets "condensed" into this final entry
+}
+	
+Value Board::see_sign(Move m) const {
+	assert(is_ok(m));
+	if(PieceValue[MG][type_of(moved_piece(m))] <= PieceValue[MG][type_of(at(to_sq(m)))]){
+		// We are taking a more/equally valuable piece with the same, so:
+		// If we are taking a more valuable piece, then even if the
+		// opponent recaptures, we are good.
+		// If the same, then we will stop there.
+		return VAL_KNOWN_WIN; // hehe
+	}
+	return see(m);
+}
 
 
 
