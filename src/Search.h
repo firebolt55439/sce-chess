@@ -12,9 +12,10 @@ namespace Search {
 	struct Stack {
 		Move* pv; // the principal variation
 		int ply; // ply at
-		Move cur_move; // move just played
+		Move current_move; // move just played
 		Depth reduction; // reduction, if/a
-		// TODO: Killers, TT move, static eval, etc.
+		Value static_eval;
+		// TODO: Killers, TT move, etc.
 		bool skip_early_pruning; // whether we should skip early pruning or not (for stuff like ProbCut, etc.)
 	};
 	
@@ -72,6 +73,7 @@ namespace Search {
 	struct SearchSignals {
 		bool stop; // whether to stop/terminate search
 		bool stop_on_ponder_hit; // stop if we get a "ponder hit"
+		bool failed_low_at_root; // if we failed low at root
 	};
 	
 	typedef std::unique_ptr<std::stack<BoardState> > BoardStateStack;
@@ -88,11 +90,6 @@ namespace Search {
 	void check_time_limit(void); // for TimerThread
 	
 	template<bool Root> uint64_t perft(Board& pos, Depth depth);
-}
-
-namespace UCI {
-	std::string value(Value v);
-	std::string move(Move m);
 }
 
 #endif // #ifndef SEARCH_INC

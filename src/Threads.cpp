@@ -81,31 +81,32 @@ void ThreadPool::init(void){
 
 void ThreadPool::start_searching(const Board& pos, const Search::SearchLimits& limits, Search::BoardStateStack& states){
 	// First, wait for the main thread to finish thinking. //
-	printf("Waiting for main thread to finish thinking...\n");
+	//printf("Waiting for main thread to finish thinking...\n");
 	while(main_thread->thinking){
 		usleep(TimerThread::PollEvery); // poll the main thread
 	}
-	printf("Main thread finished!\n");
+	//printf("Main thread finished!\n");
 	// Now, start searching. //
 	Search::SearchTime = get_system_time_msec();
-	Search::Signals.stop = Search::Signals.stop_on_ponder_hit = false;
+	Search::Signals.stop = Search::Signals.stop_on_ponder_hit = Search::Signals.failed_low_at_root = false;
 	Search::RootMoves.clear();
 	Search::RootPos = pos;
 	Search::Limits = limits;
 	if(states.get()){ // if there's nothing, preserve current BoardStateStack
-		printf("Preserving current.\n");
+		//printf("Preserving current.\n");
 		Search::SetupStates = std::move(states);
 		assert(!states.get()); // we have transferred ownership above
 	}
-	printf("Adding root moves...\n");
+	//printf("Adding root moves...\n");
 	for(MoveList<LEGAL> it(pos); *it; it++){
-		// TODO: Take into account "Limits.searchmoves"
-		Search::RootMoves.push_back(Search::RootMove(*it));
+		if(limits.SearchMoves.empty() || std::count(limits.SearchMoves.begin(), limits.SearchMoves.end(), *it)){
+			Search::RootMoves.push_back(Search::RootMove(*it));
+		}
 	}
-	printf("Notifying main thread...\n");
+	//printf("Notifying main thread...\n");
 	main_thread->thinking = true;
 	main_thread->notify_one(); // let's get thinking
-	printf("Done!\n");
+	//printf("Done!\n");
 }
 
 

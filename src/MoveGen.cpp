@@ -31,7 +31,8 @@ std::string Moves::format<false>(Move m){
 	return ret;
 }
 
-Move Moves::parse_coord(std::string move, const Board& pos){
+template<>
+Move Moves::parse<false>(std::string move, const Board& pos){
 	if(move.length() < 4 || move.length() > 5) return MOVE_NONE;
 	Rank r1, r2;
 	File f1, f2;

@@ -3,7 +3,6 @@
 #include "Board.h"
 #include "MoveGen.h"
 #include "Evaluation.h"
-#include "Search.h"
 #include "TimeManager.h"
 #include <cmath>
 #include <cstdlib>
@@ -40,7 +39,7 @@ int remaining_time(int my_time, int mtg, int ply){
 	// mtg = "moves to go", my_time = how much time we have
 	const double max_ratio = (T == OptimalTime ? 1 : MaxRatio);
 	const double steal_ratio = (T == OptimalTime ? 0 : StealRatio);
-	double importance = move_importance(ply) / 100; // this move's importance
+	double importance = move_importance(ply) * 0.8; // this move's importance (pared down a bit)
 	double other_importance = 0.0; // other moves' importance
 	for(int i = 1; i < mtg; i++){
 		// Get the rest of the moves' importance. //
@@ -54,18 +53,39 @@ int remaining_time(int my_time, int mtg, int ply){
 void TimeManager::init(const Search::SearchLimits& limits, Side us, int ply){
 	// TODO: Consider UCI options like minimum thinking time, move overhead, 
 	// slow mover, etc.
-	optimal_search_time = max_search_time = limits.time[us]; // initially, optimal = amount of time left for us on the clock
+	/*
+	option name Write Debug Log type check default false
+	option name Contempt type spin default 0 min -100 max 100
+	option name Min Split Depth type spin default 0 min 0 max 12
+	option name Threads type spin default 1 min 1 max 128
+	option name Hash type spin default 16 min 1 max 65536
+	option name Clear Hash type button
+	option name Ponder type check default true
+	option name MultiPV type spin default 1 min 1 max 500
+	option name Skill Level type spin default 20 min 0 max 20
+	option name Move Overhead type spin default 30 min 0 max 5000
+	option name Minimum Thinking Time type spin default 20 min 0 max 5000
+	option name Slow Mover type spin default 80 min 10 max 1000
+	option name UCI_Chess960 type check default false
+	*/
+	const int MinThinkingTime = 20; // in milliseconds
+	optimal_search_time = max_search_time = std::max(limits.time[us], MinThinkingTime); // initially, optimal = amount of time left for us on the clock, but at least 20 milliseconds
 	const int MaxMTG = (limits.movestogo ? std::min(limits.movestogo, MoveHorizon) : MoveHorizon);
 	for(int i = 0; i < MaxMTG; i++){
 		// We now look into the future - yeah, for sure - and optimize the time
 		// for this move.
-		int my_time = limits.time[us] + (limits.inc[us] * (i - 1)); // find how much time we "have"
-		int pos_optimal = remaining_time<OptimalTime>(my_time, i, ply);
-		int pos_max = remaining_time<MaxTime>(my_time, i, ply);
+		int my_time = limits.time[us] + (limits.inc[us] * (i - 1)) - (30 * (2 + std::min(i, 40))); // find how much time we "have" and also subtract the overhead costs of making moves, etc.
+		my_time = std::max(my_time, 0); // can't be negative
+		int pos_optimal = MinThinkingTime + remaining_time<OptimalTime>(my_time, i, ply);
+		int pos_max = MinThinkingTime + remaining_time<MaxTime>(my_time, i, ply);
 		optimal_search_time = std::min(pos_optimal, optimal_search_time); // we try to reduce time as much as possible
 		max_search_time = std::min(pos_max, max_search_time);
 	}
+	if(limits.ponder){
+		optimal_search_time += (optimal_search_time / 4); // if we are pondering, please think a bit more
+	}
 	optimal_search_time = std::min(optimal_search_time, max_search_time); // just want to make sure that optimal is <= max always
+	//printf("optimal search time: %f seconds\n", optimal_search_time / 1000.0);
 }
 
 

@@ -1,6 +1,6 @@
 CXX=clang++
-CXXFLAGS=-c -std=c++11 -g -O2 -Wall -Wno-unused-function -fstack-protector
-LDFLAGS=-stdlib=libc++ -lpthread
+CXXFLAGS=-c -std=c++11 -g -O2 -Wall -Wno-unused-function
+LDFLAGS=-stdlib=libc++ -lpthread -g
 SOURCES=$(wildcard src/*.cpp)
 OBJECTS=$(addprefix obj/,$(notdir $(SOURCES:.cpp=.o)))
 EXECUTABLE=bin/chess

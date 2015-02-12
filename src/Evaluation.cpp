@@ -107,7 +107,7 @@ void Eval::init(void){
 		Score v = make_score(PieceValue[MG][pt], PieceValue[EG][pt]);
 		for(Square s = SQ_A1; s <= SQ_H8; s++){
 			PSQTable[WHITE][pt][s] = v + Eval::PieceSquareTable[pt][s];
-			PSQTable[BLACK][pt][~s] = -(v + Eval::PieceSquareTable[pt][s]);
+			PSQTable[BLACK][pt][~s] = -v - Eval::PieceSquareTable[pt][s];
 		}
 	}
 }
@@ -285,6 +285,22 @@ Score evaluate_king(const Board& pos, EvalInfo& ei){
 	return score;
 }
 
+template<Side Us, bool Verbose>
+Score evaluate_passed_pawns(const Board& pos, EvalInfo& ei){
+	const Side Them = (Us == WHITE ? BLACK : WHITE);
+	Score score = SCORE_ZERO;
+	Bitboard b = ei.pe->passedPawns[Us];
+	while(b){
+		Square s = pop_lsb(&b);
+		// TODO: For now, just bonus based on distance to promotion.
+		int r = relative_rank(Us, s) - RANK_2;
+		int rr = r * (r - 1);
+		Value mbonus = Value(17 * rr), ebonus = Value(7 * (rr + r + 1));
+		score += make_score(mbonus, ebonus);
+	}
+	return apply_weight(score, Weights[PassedPawns]);
+}
+
 template<bool Verbose>
 Value do_evaluate(const Board& pos){
 	// Returns score relative to side to move (e.g. -200 for black to move is +200 for white to move). //
@@ -337,6 +353,9 @@ Value do_evaluate(const Board& pos){
 	// King Safety //
 	score += evaluate_king<WHITE, Verbose>(pos, ei) - evaluate_king<BLACK, Verbose>(pos, ei);
 	if(Verbose) printf("+King: %s\n", score_str(score).c_str());
+	// Passed Pawns //
+	score += evaluate_passed_pawns<WHITE, Verbose>(pos, ei) - evaluate_passed_pawns<BLACK, Verbose>(pos, ei);
+	if(Verbose) printf("+Passed Pawns: %s\n", score_str(score).c_str());
 	// Return //
 	// TODO: ScaleFactor's and specialized evaluation functions
 	ScaleFactor scale_factor = SCALE_FACTOR_NORMAL; // TODO
@@ -344,6 +363,7 @@ Value do_evaluate(const Board& pos){
 	final_score /= int(PHASE_MIDGAME);
 	if(Verbose) printf("Final score: %d\n", final_score);
 	// TODO: Tempo
+	assert(abs(final_score) < VAL_INF);
 	return (pos.side_to_move() == WHITE) ? (final_score) : (-final_score);
 }
 

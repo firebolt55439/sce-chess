@@ -122,9 +122,10 @@ enum Bound {
 enum Value {
 	VAL_ZERO = 0,
 	VAL_DRAW = 0,
-	VAL_KNOWN_WIN = 50000,
-	VAL_MATE = 100000,
+	VAL_KNOWN_WIN = 5000,
+	VAL_MATE = 32000,
 	VAL_INF = VAL_MATE + 1,
+	VAL_NONE = VAL_MATE + 2,
 	
 	VAL_MATE_IN_MAX_PLY = VAL_MATE - MAX_PLY,
 	VAL_MATED_IN_MAX_PLY = -VAL_MATE + MAX_PLY,
@@ -284,10 +285,12 @@ inline CastlingRight operator|(Side c, CastlingSide s){
 }
 
 inline Value mate_in(int ply){
+	assert(ply > 0);
 	return VAL_MATE - ply;
 }
 
 inline Value mated_in(int ply){
+	assert(ply > 0);
 	return -VAL_MATE + ply; // basically negative mate_in(ply)
 }
 
