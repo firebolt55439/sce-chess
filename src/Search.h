@@ -74,6 +74,7 @@ namespace Search {
 		bool stop; // whether to stop/terminate search
 		bool stop_on_ponder_hit; // stop if we get a "ponder hit"
 		bool failed_low_at_root; // if we failed low at root
+		bool first_root_move; // if we are on the first root move or not
 	};
 	
 	typedef std::unique_ptr<std::stack<BoardState> > BoardStateStack;

@@ -68,6 +68,33 @@ const Score ThreatenedByPawn[PIECE_TYPE_NB - 1] = {
 // Evaluation Bonuses/Penalties //
 const Score RookOnPawn = S(7, 27); // for rooks picking off pawns
 
+const Score MobilityBonus[][32] = {
+	// Mobility Bonus by [piece type][number of available squares]
+	{}, // NO_PIECE_TYPE
+	{}, // Pawns (handled separately)
+	{ 
+		S(-65,-50), S(-42,-30), S(-9,-10), S( 3,  0), S(15, 10), S(27, 20), // Knights
+		S( 37, 28), S( 42, 31), S(44, 33) 
+	},
+	{ 
+		S(-52,-47), S(-28,-23), S( 6,  1), S(20, 15), S(34, 29), S(48, 43), // Bishops
+		S( 60, 55), S( 68, 63), S(74, 68), S(77, 72), S(80, 75), S(82, 77),
+		S( 84, 79), S( 86, 81) 
+	},
+	{ 
+		S(-47,-53), S(-31,-26), S(-5,  0), S( 1, 16), S( 7, 32), S(13, 48), // Rooks
+		S( 18, 64), S( 22, 80), S(26, 96), S(29,109), S(31,115), S(33,119),
+		S( 35,122), S( 36,123), S(37,124) 
+	},
+	{ 
+		S(-42,-40), S(-28,-23), S(-5, -7), S( 0,  0), S( 6, 10), S(11, 19), // Queens
+		S( 13, 29), S( 18, 38), S(20, 40), S(21, 41), S(22, 41), S(22, 41),
+		S( 22, 41), S( 23, 41), S(24, 41), S(25, 41), S(25, 41), S(25, 41),
+		S( 25, 41), S( 25, 41), S(25, 41), S(25, 41), S(25, 41), S(25, 41),
+		S( 25, 41), S( 25, 41), S(25, 41), S(25, 41) 
+	}
+};
+
 // Check Danger Constants for King Danger //
 // Note: Only safe checks are counted.
 // Contact Checks
@@ -159,7 +186,7 @@ Score psq_score(const Board& pos){
 }
 
 template<PieceType Pt, Side Us, bool Verbose>
-Score evaluate_pieces(const Board& pos, EvalInfo& ei){
+Score evaluate_pieces(const Board& pos, EvalInfo& ei, Score* mobility, Bitboard* mobility_area){
 	// This contains rules to evaluate each piece by. //
 	// Note: Pawns and kings are evaluated separately.
 	// TODO: Mobility
@@ -194,6 +221,8 @@ Score evaluate_pieces(const Board& pos, EvalInfo& ei){
 			// less valuable pieces (e.g. knights, bishops, rooks, etc.)
 			b &= ~(ei.attackedBy[Them][KNIGHT] | ei.attackedBy[Them][BISHOP] | ei.attackedBy[Them][ROOK]);
 		}
+		int mob = (Pt != QUEEN) ? (popcount<Max15>(b & mobility_area[Us])) : (popcount<Full>(b & mobility_area[Us])); // since the queen can possibly go to more than 15 squares
+		mobility[Us] += MobilityBonus[Pt][mob];
 		if(ei.attackedBy[Them][PAWN] & s){
 			// Penalty if attacked by pawn. //
 			score -= ThreatenedByPawn[Pt];
@@ -213,16 +242,16 @@ Score evaluate_pieces(const Board& pos, EvalInfo& ei){
 			// TODO: Penalty for being trapped by king, esp. if king cannot castle
 		}
 	}
-	return score - evaluate_pieces<NextPt, Them, Verbose>(pos, ei);
+	return score - evaluate_pieces<NextPt, Them, Verbose>(pos, ei, mobility, mobility_area);
 }
 
 template<>
-Score evaluate_pieces<KING, WHITE, true>(const Board&, EvalInfo&){
+Score evaluate_pieces<KING, WHITE, true>(const Board&, EvalInfo&, Score*, Bitboard*){
 	return SCORE_ZERO; // stop here
 }
 
 template<>
-Score evaluate_pieces<KING, WHITE, false>(const Board&, EvalInfo&){
+Score evaluate_pieces<KING, WHITE, false>(const Board&, EvalInfo&, Score*, Bitboard*){
 	return SCORE_ZERO; // stop here
 }
 
@@ -288,14 +317,60 @@ Score evaluate_king(const Board& pos, EvalInfo& ei){
 template<Side Us, bool Verbose>
 Score evaluate_passed_pawns(const Board& pos, EvalInfo& ei){
 	const Side Them = (Us == WHITE ? BLACK : WHITE);
+	const Square ksq_us = pos.king_sq(Us), ksq_them = pos.king_sq(Them);
 	Score score = SCORE_ZERO;
 	Bitboard b = ei.pe->passedPawns[Us];
+	Bitboard defended, unsafe, to_queen;
 	while(b){
 		Square s = pop_lsb(&b);
-		// TODO: For now, just bonus based on distance to promotion.
 		int r = relative_rank(Us, s) - RANK_2;
 		int rr = r * (r - 1);
 		Value mbonus = Value(17 * rr), ebonus = Value(7 * (rr + r + 1));
+		if(rr){ // means that it has advanced at least 2 ranks (or rr would be 0)
+			// First, we want to maximize distance away from their king and minimize
+			// distance away from ours - much more if we are far advanced.
+			ebonus += (5 * rr * distance(ksq_them, s)) - (2 * rr * distance(ksq_us, s));
+			Square next_sq = s + pawn_push(Us);
+			if(relative_rank(Us, next_sq) != RANK_8){
+				// OK, we can't promote in one move, so let's consider one
+				// more square.
+				ebonus -= distance(ksq_us, next_sq + pawn_push(Us)) * rr;
+			}
+			if(pos.empty(next_sq)){
+				// OK, we can move up one.
+				defended = unsafe = to_queen = forward_bb(Us, s);
+				Bitboard bb = forward_bb(Them, s) & pos.pieces(ROOK, QUEEN) & pos.attacks_from<ROOK>(s); // any rooks or queens that are on the file and are attacking this pawn
+				if(!(pos.pieces(Us) & bb)){ 
+					// We have no defenders on this file.
+					defended &= ei.attackedBy[Us][ALL_PIECES]; // only what squares are protected by us
+				}
+				if(!(pos.pieces(Them) & bb)){
+					unsafe &= ei.attackedBy[Them][ALL_PIECES] | pos.pieces(Them); // unsafe squares are attacked by them (or are occupied)
+				}
+				int mult = (!unsafe ? 15 : (!(unsafe & next_sq) ? 9 : 0)); // a bonus multiplier - esp. high if our file is open, somewhat high if we can advance, otherwise no bonus
+				if(defended == to_queen){
+					// Wow, we literally have EVERYTHING defended in front of the pawn. //
+					mult += 6;
+				} else if(defended & next_sq){
+					// At least we can move up more. //
+					mult += 4;
+				}
+				mbonus += mult * rr;
+				ebonus += mult * rr;
+			} else if(pos.pieces(Us) & next_sq){
+				// So our own piece is blocking the square. //
+				// We give it a bonus b/c it could mean that
+				// we are extremely close to promoting and just
+				// want to make sure the pawn isn't going to
+				// be taken.
+				mbonus += (rr * 3) + (r * 2) + 3;
+				ebonus += rr + (r * 2);
+			}
+		}
+		if(pos.count(Us, PAWN) > pos.count(Them, PAWN)){
+			ebonus += (ebonus / 4); // in the endgame, we'll have more opportunities, so this is the opportunity bonus
+									// and also so we can split their attention and force them to make a choice
+		}
 		score += make_score(mbonus, ebonus);
 	}
 	return apply_weight(score, Weights[PassedPawns]);
@@ -305,7 +380,7 @@ template<bool Verbose>
 Value do_evaluate(const Board& pos){
 	// Returns score relative to side to move (e.g. -200 for black to move is +200 for white to move). //
 	// Note: All helper functions should return score relative to white. //
-	Score score = SCORE_ZERO;
+	Score score = SCORE_ZERO, mobility_score[SIDE_NB] = { SCORE_ZERO, SCORE_ZERO };
 	EvalInfo ei;
 	Value nonPawnMaterial[SIDE_NB];
 	Phase game_phase;
@@ -328,7 +403,7 @@ Value do_evaluate(const Board& pos){
 	game_phase = Phase(((total_npm - EndgameLimit) * PHASE_MIDGAME) / (MidgameLimit - EndgameLimit)); // scale phase b/w midgame and endgame, truncate decimal point
 	if(Verbose) printf("Game phase: %d\n", game_phase);
 	// TODO: Mobility area, space evaluation
-	// TODO: Threats, passed pawns, etc.
+	// TODO: Threats, etc.
 	// Material Factoring //
 	const int pcounts[PIECE_TYPE_NB - 1][SIDE_NB] = {
 		{}, // NO_PIECE_TYPE
@@ -347,9 +422,12 @@ Value do_evaluate(const Board& pos){
 	// Pawns //
 	score += apply_weight(ei.pe->pawn_score(), Weights[PawnStructure]);
 	if(Verbose) printf("+Pawns Score: %s\n", score_str(score).c_str());
-	// Piece-Specific Evaluation //
-	score += evaluate_pieces<KNIGHT, WHITE, Verbose>(pos, ei);
+	// Piece-Specific Evaluation and Mobility //
+	Bitboard mobility_area[SIDE_NB] = { ~(ei.attackedBy[BLACK][PAWN] | pos.pieces(WHITE, PAWN, KING)), ~(ei.attackedBy[WHITE][PAWN] | pos.pieces(BLACK, PAWN, KING)) }; // what we are considering as "mobile" squares
+	score += evaluate_pieces<KNIGHT, WHITE, Verbose>(pos, ei, mobility_score, mobility_area);
 	if(Verbose) printf("+Pieces: %s\n", score_str(score).c_str());
+	score += apply_weight(mobility_score[WHITE] - mobility_score[BLACK], Weights[Mobility]);
+	if(Verbose) printf("+Mobility: %s\n", score_str(score).c_str());
 	// King Safety //
 	score += evaluate_king<WHITE, Verbose>(pos, ei) - evaluate_king<BLACK, Verbose>(pos, ei);
 	if(Verbose) printf("+King: %s\n", score_str(score).c_str());

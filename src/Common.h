@@ -144,7 +144,10 @@ enum Value {
 enum Depth {
 	ONE_PLY = 1,
 	DEPTH_ZERO = 0,
-	DEPTH_MAX = MAX_PLY
+	DEPTH_MAX = MAX_PLY,
+	DEPTH_QS_CHECKS = 0, // for searching checks
+	DEPTH_QS_NO_CHECKS = -1, // no checks
+	DEPTH_QS_RECAPTURES = -5 // only recaptures
 };
 
 enum Square {

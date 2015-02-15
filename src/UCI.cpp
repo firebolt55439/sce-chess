@@ -98,7 +98,7 @@ void UCI::loop(int argc, char** argv){
 	std::stringstream nm;
 	nm << "uci_log_" << get_system_time_msec() << ".txt";
 	std::ofstream ofp(nm.str());
-	while(true){
+	while(tok != "quit"){
 		inp.clear(); // clear flags
 		tok.clear();
 		std::getline(std::cin, inp);
@@ -106,8 +106,11 @@ void UCI::loop(int argc, char** argv){
 		std::istringstream ss(inp);
 		ss >> std::skipws >> tok;
 		if(tok == "uci"){
-			std::cout << "id name SCE 0.1 author Sumer Kohli" << std::endl;
-			// TODO: Send options to GUI for customizing
+			std::cout << "id name SCE 0.1" << std::endl;
+			std::cout << "id author Sumer Kohli" << std::endl;
+			// TODO: Send more options to GUI for customizing and handle 'setoption'
+			std::cout << std::endl;
+			std::cout << "option name Ponder type check default true" << std::endl; // declare our ability to ponder for polyglot
 			std::cout << "uciok" << std::endl;
 		} else if(tok == "isready"){
 			std::cout << "readyok" << std::endl;

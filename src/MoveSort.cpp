@@ -13,6 +13,14 @@ enum {
 		BAD_CAPTURES_S1, // bad captures
 	EVASION, // regular evasions
 		EVASIONS_S1, // evasions itself
+	QSEARCH_0, // QS with checks
+		QS_CAPTURES_S1,
+		QS_CHECKS_S1, // quiet checks
+	QSEARCH_1, // QS without checks
+		QS_CAPTURES_S2,
+	// TODO: ProbCut
+	RECAPTURE, // QS recaptures
+		RECAPTURE_S1, // QS recaptures
 	STOP // when we are done
 	// TODO: More stuff here...
 };
@@ -39,17 +47,30 @@ inline ActMove* pick_best(ActMove* begin, ActMove* end){
 }
 
 MoveSorter::MoveSorter(const Board& p, Depth d, const HistoryTable& ht, Search::Stack* s) : pos(p), hst(ht), ss(s), depth(d) {
-	assert(d > DEPTH_ZERO); // have not implemented QS yet
+	assert(d > DEPTH_ZERO); // only main search
 	cur = end = moves; // reset current and end
 	end_bad_captures = moves + MAX_MOVES - 1; // the end of the array
 	if(pos.checkers()) stage = EVASION;
 	else stage = REGULAR;
 }
 
+MoveSorter::MoveSorter(const Board& p, Depth d, const HistoryTable& ht, Square s) : pos(p), hst(ht), cur(moves), end(moves) {
+	assert(d <= DEPTH_ZERO); // only QS search
+	if(pos.checkers()){
+		stage = EVASION;
+	} else if(d > DEPTH_QS_NO_CHECKS){
+		stage = QSEARCH_0;
+	} else if(d > DEPTH_QS_RECAPTURES){
+		stage = QSEARCH_1;
+	} else {
+		stage = RECAPTURE;
+		recap_sq = s;
+	}
+}
+
 template<>
 void MoveSorter::score<CAPTURES>(void){
 	// This uses MVV/LVA ordering for captures. //
-	// TODO: Move bad captures to end using SEE
 	// TOOD: Killer moves
 	// TOOD: TT/Hash moves
 	for(ActMove* it = cur; it != end; it++){
@@ -91,7 +112,7 @@ void MoveSorter::score<EVASIONS>(void){
 void MoveSorter::gen_next_stage(void){
 	cur = moves; // start from the beginning
 	switch(++stage){
-		case CAPTURES_S1:
+		case CAPTURES_S1: case QS_CAPTURES_S1: case QS_CAPTURES_S2: case RECAPTURE_S1:
 			end = generate_moves<CAPTURES>(pos, moves);
 			score<CAPTURES>();
 			return;
@@ -121,11 +142,14 @@ void MoveSorter::gen_next_stage(void){
 			end = generate_moves<EVASIONS>(pos, moves);
 			score<EVASIONS>();
 			return;
-		case EVASION:
+		case QS_CHECKS_S1:
+			end = generate_moves<QUIET_CHECKS>(pos, moves);
+			// No need to score the *quiet* checks --> emphasis on *quiet*
+			return;
+		case EVASION: case QSEARCH_0: case QSEARCH_1: case RECAPTURE:
 			// If we are at one of these, then we completed all stages of a previous cycle. //
 			stage = STOP;
-			++cur; // otherwise the while loop of (cur == end) will never terminate in next_move()
-			return;
+			/* Fall through */
 		case STOP:
 			end = cur + 1; // so the while loop will stop looping and this won't get called again and we won't end up at (STOP + 1) and have to abort
 			return;
@@ -154,10 +178,20 @@ Move MoveSorter::next_move(void){
 				return m;
 			case BAD_CAPTURES_S1:
 				return (cur--)->move;
-			case EVASIONS_S1:
+			case EVASIONS_S1: case QS_CAPTURES_S1: case QS_CAPTURES_S2:
 				m = pick_best(cur++, end)->move;
 				// TODO: Check against TT move
 				return m;
+			case RECAPTURE_S1:
+				m = pick_best(cur++, end)->move;
+				if(to_sq(m) == recap_sq){
+					return m;
+				}
+				break;
+			case QS_CHECKS_S1:
+				m = (cur++)->move; // no need to use pick_best in this case
+				// TODO: Check against TT move
+				break;
 			default:
 				assert(false);
 		}

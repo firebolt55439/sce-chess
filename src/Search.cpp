@@ -165,6 +165,7 @@ void search_loop(Board& pos){
 				}
 				if(Signals.stop) break; // stop - no time or told to stop
 				if(PVLinesNum == 1 && (best_val <= alpha || best_val >= beta) && (get_system_time_msec() - 3000 > SearchTime)){
+					// Give UCI update when failing high/low (e.g. lowerbound/upperbound). //
 					std::cout << uci_pv(pos, depth, alpha, beta) << std::endl;
 				}
 				if(best_val <= alpha){
@@ -181,18 +182,17 @@ void search_loop(Board& pos){
 					alpha = (alpha + beta) / 2; // push our luck with alpha
 					beta = std::min(best_val + delta, VAL_INF); // increase beta
 				} else {
-					Signals.failed_low_at_root = false; // we have got a move now that didn't fail low
 					break;
 				}
 				delta += (delta / 2); // increase how quickly we increase our bounds exponentially (by a factor of 1.5)
-				// TODO: Optimize above (2x is too quick, 1.5x may be a bit too slow)
+				// TODO: Optimize above factor (2x is too quick, 1.5x may be a bit too slow)
 				assert((alpha >= -VAL_INF) && (beta <= VAL_INF)); // just make sure
 			}
-			std::stable_sort(RootMoves.begin(), RootMoves.begin() + PVIdx + 1); // sort what we have *already* searched so far
+			std::stable_sort(RootMoves.begin(), RootMoves.begin() + PVIdx + 1); // sort the lines that we have *already* searched so far
 			if(Signals.stop){
 				// TODO: Fully implement node count
 				std::cout << "info nodes " << uint64_t(0) /* TODO */ << " time " << get_system_time_msec() - SearchTime << std::endl;
-			} else if((PVIdx + 1 == RootMoves.size()) || (get_system_time_msec() - 3000 > SearchTime) || true){
+			} else if((PVIdx + 1 == PVLinesNum) || (get_system_time_msec() - 3000 > SearchTime)){
 				// We display the PV for root only if we have just finished an entire root
 				// PV line or it has already been more than 3 seconds since the 
 				// search started.
@@ -220,7 +220,7 @@ void update_pv(Move* pv, Move move, Move* child_pv){
 	*pv = MOVE_NONE; // stop it right here
 }
 
-uint64_t failed_high_total, failed_high_first; // for measuring move ordering
+uint64_t failed_high_total, failed_high_first, failed_high_second; // for measuring move ordering
 
 template<NodeType NT>
 Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cut_node){
@@ -230,11 +230,7 @@ Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool c
 	assert(PvNode || (alpha == (beta - 1))); // either this is a PV node or some zero window searches are being done
 	BoardState st; // a BoardState we use for doing moves
 	const bool in_check = pos.checkers();
-	assert(depth >= DEPTH_ZERO);
-	if(depth == DEPTH_ZERO){
-		// Recursive Base Case //
-		return Eval::evaluate(pos);
-	}
+	assert(depth > DEPTH_ZERO);
 	const Value old_alpha = alpha;
 	// Set Up Stack //
 	Move pv[MAX_PLY + 1]; // PV used for children of PV nodes
@@ -292,7 +288,9 @@ Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool c
 			// Note: Also, this essentially implements the "searchmoves" option.
 			continue;
 		}
+		++move_num;
 		if(RootNode){
+			Signals.first_root_move = (move_num == 1);
 			if(get_system_time_msec() - 3000 > SearchTime){
 				std::cout << "info depth " << (depth / ONE_PLY) << " currmove " << UCI::move(m) << " currmovenumber " << move_num << std::endl;
 			}
@@ -300,7 +298,6 @@ Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool c
 		if(PvNode){
 			(ss + 1)->pv = NULL; // we haven't set its PV yet
 		}
-		++move_num;
 		Depth extension = DEPTH_ZERO;
 		bool cap_or_prom = pos.is_capture(m) || (type_of(m) == PROMOTION);
 		bool gives_check = (type_of(m) == NORMAL && !pos.lined(pos.side_to_move())) ? (ci.kattk[type_of(pos.at(from_sq(m)))] & to_sq(m)) : pos.gives_check(m, ci);
@@ -358,7 +355,10 @@ Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool c
 		}
 		if(do_full_depth_search){
 			// Full Depth Search //
-			score = -search<NonPV>(pos, (ss + 1), -(alpha + 1), -alpha, new_depth, !cut_node); // since the children of a cut-node cannot also be a cut-node
+			score = (new_depth < ONE_PLY) ? 
+					(gives_check ? (-qsearch<NonPV, true>(pos, (ss + 1), -(alpha + 1), -alpha, DEPTH_ZERO))
+								 : (-qsearch<NonPV, false>(pos, (ss + 1), -(alpha + 1), -alpha, DEPTH_ZERO)))
+								 : (-search<NonPV>(pos, (ss + 1), -(alpha + 1), -alpha, new_depth, !cut_node)); // since the children of a cut-node cannot also be a cut-node (cut-nodes are only at odd plies)
 		}
 		if(PvNode && ((move_num == 1) || (score > alpha && (RootNode || score < beta)))){
 			// PVS //
@@ -366,7 +366,10 @@ Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool c
 			// was within the alpha-beta window.
 			(ss + 1)->pv = pv; // setup next PV
 			(ss + 1)->pv[0] = MOVE_NONE; // reset next first move
-			score = -search<PV>(pos, (ss + 1), -beta, -alpha, new_depth, false); // is_cut_node = false since we don't know if the next one is for sure
+			score = (new_depth < ONE_PLY) ? 
+					(gives_check ? (-qsearch<PV, true>(pos, (ss + 1), -beta, -alpha, DEPTH_ZERO))
+								 : (-qsearch<PV, false>(pos, (ss + 1), -beta, -alpha, DEPTH_ZERO)))
+								 : (-search<PV>(pos, (ss + 1), -beta, -alpha, new_depth, false)); // is_cut_node = false since we don't know if the next one is for sure
 		}
 		pos.undo_move(m);
 		if(Signals.stop){
@@ -414,9 +417,95 @@ Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool c
 		const Value bonus = Value(int(depth) * int(depth));
 		History.register_update(pos.moved_piece(m), to_sq(m), bonus);
 		if(move_num == 1) ++failed_high_first;
+		else if(move_num == 2) ++failed_high_second;
 		++failed_high_total;
 	}
 	assert(best_score > -VAL_INF);
+	return best_score;
+}
+
+template<NodeType NT, bool InCheck>
+Value qsearch(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth){
+	// Note: 'depth' can be negative.
+	const bool PvNode = (NT == PV);
+	assert(NT != Root);
+	assert(InCheck == bool(pos.checkers()));
+	assert((-VAL_INF <= alpha) && (alpha < beta) && (beta <= VAL_INF));
+	assert(PvNode || (alpha == beta - 1));
+	assert(depth <= DEPTH_ZERO);
+	Move pv[MAX_PLY + 1]; // for giving the PV to children
+	Move best_move, m;
+	BoardState st;
+	Value best_score, old_alpha, score;
+	if(PvNode){
+		old_alpha = alpha; // for TT reference
+		(ss + 1)->pv = pv; // give child a PV
+		ss->pv[0] = MOVE_NONE; // reset our own PV (since we can't rely on search() to do it for us necessarily)
+	}
+	ss->current_move = best_move = MOVE_NONE;
+	ss->ply = (ss - 1)->ply + 1;
+	// Check for draws, going over maximum ply. //
+	if(pos.is_draw() || (ss->ply >= MAX_PLY)){
+		return (ss->ply >= MAX_PLY && !InCheck) ? (Eval::evaluate(pos)) : (DrawValue[pos.side_to_move()]);
+	}
+	assert((0 <= ss->ply) && (ss->ply < MAX_PLY));
+	// TODO: TT Lookup
+	// TODO: Futility base
+	if(InCheck){
+		ss->static_eval = VAL_NONE;
+		best_score = -VAL_INF;
+	} else {
+		ss->static_eval = best_score = ((ss - 1)->current_move != MOVE_NULL) ? (Eval::evaluate(pos)) : (-(ss - 1)->static_eval); // TODO: Add Eval::Tempo
+		// Stand pat if possible. //
+		if(best_score >= beta){
+			// TODO: Save to TT
+			return best_score;
+		}
+		if(PvNode && (best_score > alpha)){
+			alpha = best_score;
+		}
+	}
+	MoveSorter mp(pos, depth, History, to_sq((ss - 1)->current_move)); // const Board& p, Depth d, const HistoryTable& ht, Square s
+	CheckInfo ci(pos);
+	const Bitboard pinned = pos.pinned(pos.side_to_move());
+	while((m = mp.next_move()) != MOVE_NONE){
+		assert(is_ok(m));
+		bool gives_check = (type_of(m) == NORMAL && !pos.lined(pos.side_to_move())) ? (ci.kattk[type_of(pos.at(from_sq(m)))] & to_sq(m)) : pos.gives_check(m, ci);
+		// TODO: Futility pruning with Futility Base
+		bool is_prunable_evasion = InCheck && (best_score > VAL_MATED_IN_MAX_PLY) && !pos.is_capture(m) && !pos.can_castle(CastlingRight((WHITE_OO | WHITE_OOO) << (2 * pos.side_to_move())));
+		if((!InCheck || is_prunable_evasion) && (type_of(m) != PROMOTION) && (pos.see_sign(m) < VAL_ZERO)){
+			continue; // avoid losing captures (unless in check)
+		}
+		if(!pos.legal(m, pinned)){
+			continue; // illegal move
+		}
+		ss->current_move = m; // set current move
+		pos.do_move(m, st);
+		score = gives_check ? (-qsearch<NT, true>(pos, (ss + 1), -beta, -alpha, (depth - ONE_PLY))) : (-qsearch<NT, false>(pos, (ss + 1), -beta, -alpha, (depth - ONE_PLY)));
+		pos.undo_move(m);
+		assert((score > -VAL_INF) && (score < VAL_INF));
+		if(score > best_score){
+			best_score = score;
+			if(score > alpha){
+				if(PvNode){
+					update_pv(ss->pv, m, (ss + 1)->pv); // copy PV from child
+				}
+				if(PvNode && (score < beta)){
+					alpha = score;
+					best_move = m;
+				} else {
+					// Fail-high. //
+					// TODO: TT Save
+					return score;
+				}
+			}
+		}
+	}
+	if(InCheck && (best_score == -VAL_INF)){
+		// In check and no legal moves searched/found? Must be checkmate. //
+		return mated_in(ss->ply);
+	}
+	// TODO: TT Save
 	return best_score;
 }
 
@@ -425,7 +514,7 @@ void Search::think(void){
 	// Note: The SearchLimits, SearchTime, etc. should already
 	// be correctly initialized and set to the values provided
 	// by the GUI.
-	failed_high_total = failed_high_first = 0;
+	failed_high_total = failed_high_first = failed_high_second = 0;
 	Side to_move = RootPos.side_to_move();
 	TimeMgr.init(Limits, to_move, RootPos.get_ply());
 	Value contempt = VAL_ZERO; // TODO: Base this on game phase
@@ -449,7 +538,7 @@ void Search::think(void){
 		std::cout << " ponder " << UCI::move(RootMoves[0].pv[1]);
 	}
 	std::cout << std::endl;
-	printf("# Of %llu moves, %llu were on the first try, so move ordering is %.3f%%.\n", failed_high_total, failed_high_first, double(failed_high_first) / double(failed_high_total) * 100.0);
+	printf("# Of %llu moves, %llu were on the first try and %llu on the second, so move ordering is %.3f%% (or tot. %.3f%%).\n", failed_high_total, failed_high_first, failed_high_second, double(failed_high_first) / double(failed_high_total) * 100.0, double(failed_high_first + failed_high_second) / double(failed_high_total) * 100.0);
 }
 
 void Search::check_time_limit(void){
@@ -462,7 +551,7 @@ void Search::check_time_limit(void){
 		return;
 	}
 	if(Limits.use_time_manager()){
-		bool past_time = !Signals.failed_low_at_root && (elapsed > TimeMgr.available_time() * 75 / 100);
+		bool past_time = Signals.first_root_move && !Signals.failed_low_at_root && (elapsed > TimeMgr.available_time() * 75 / 100);
 		if(past_time || (elapsed > (TimeMgr.maximum_time() - (2 * TimerThread::PollEvery)))){
 			Signals.stop = true;
 		}

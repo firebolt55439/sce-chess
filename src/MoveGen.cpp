@@ -51,12 +51,17 @@ Move Moves::parse<false>(std::string move, const Board& pos){
 		m = make<PROMOTION>(from, to, prom);
 	}
 	for(MoveList<LEGAL> it(pos); *it; it++){
-		if(type_of(*it) != CASTLING){
-			if(*it == m) return *it;
-		} else {
+		if(type_of(*it) == CASTLING){
+			Square f = from_sq(*it), t = to_sq(*it);
 			// For castling, the user might enter "e1g1" or such. //
-			Square kto = (to < from) ? (from - Square(2)) : (from + Square(2));
-			if((from_sq(*it) == from) && (kto == to)){
+			Square kto = (t < f) ? (f - Square(2)) : (f + Square(2));
+			if((f == from) && (to == kto)){
+				return *it;
+			}
+		} else if(type_of(*it) == NORMAL || type_of(*it) == PROMOTION){
+			if(*it == m) return *it;
+		} else if(type_of(*it) == ENPASSANT){
+			if(from_sq(m) == from_sq(*it) && to_sq(m) == to_sq(*it)){
 				return *it;
 			}
 		}
@@ -70,17 +75,29 @@ Move Moves::parse<false>(std::string move, const Board& pos){
 template<GenType T>
 ActMove* generate_sliders_knight(const Board& pos, ActMove* list, Side us){
 	// This generates all slider moves and knight moves as specified by GenType. //
-	Bitboard pcs = pos.pieces(us, KNIGHT, BISHOP) | pos.pieces(us, ROOK, QUEEN);
+	Bitboard attks[PIECE_TYPE_NB - 1];
+	if(T == QUIET_CHECKS){
+		const Square ksq = pos.king_sq(~us); // their king
+		const Bitboard exc = ~pos.all(); // since they are *quiet* checks
+		attks[ROOK] = pos.attacks_from<ROOK>(ksq) & exc;
+		attks[BISHOP] = pos.attacks_from<BISHOP>(ksq) & exc;
+		attks[KNIGHT] = pos.attacks_from<KNIGHT>(ksq) & exc;
+		attks[QUEEN] = attks[ROOK] | attks[BISHOP];
+	}
 	const Square ksq = pos.king_sq(us);
+	Bitboard pcs = pos.pieces(us, KNIGHT, BISHOP) | pos.pieces(us, ROOK, QUEEN);
 	const Square chksq = (T == EVASIONS) ? lsb(pos.checkers()) : SQ_NONE;
 	while(pcs){
 		Square from = pop_lsb(&pcs);
 		Piece on = pos.at(from);
+		PieceType pt = type_of(on);
 		Bitboard possibs = pos.attacks_from(on, from) & (~pos.pieces(us)) & ~pos.pieces(KING); // don't want to take our own pieces
 		if(T == CAPTURES){
 			possibs &= pos.pieces(~us); // have to capture
 		} else if(T == NON_CAPTURES){
 			possibs &= ~pos.all(); // can't capture anything
+		} else if(T == QUIET_CHECKS){
+			possibs &= attks[pt]; // only the squares that it gives check on
 		}
 		while(possibs){
 			Square to = pop_lsb(&possibs);
@@ -95,6 +112,7 @@ ActMove* generate_sliders_knight(const Board& pos, ActMove* list, Side us){
 template<GenType T>
 ActMove* generate_king(const Board& pos, ActMove* list, Side us){
 	// This generates all king moves (other than castling). //
+	assert(T != QUIET_CHECKS);
 	Square from = pos.king_sq(us);
 	Bitboard possibs = pos.attacks_from<KING>(from) & (~pos.pieces(us));
 	if(T == EVASIONS){
@@ -117,7 +135,7 @@ ActMove* generate_king(const Board& pos, ActMove* list, Side us){
 template<GenType T>
 ActMove* generate_castles(const Board& pos, ActMove* list, Side us){
 	assert((T != EVASIONS) && (T != CAPTURES)); // a castling move cannot be an evasion since we cannot castle under check and cannot capture anything
-	const Square ksq = pos.king_sq(us);
+	const Square ksq = pos.king_sq(us), tksq = (T == QUIET_CHECKS) ? pos.king_sq(~us) : SQ_NONE;
 	for(CastlingRight on = WHITE_OO; on <= BLACK_OOO; on = CastlingRight(on << 1)){
 		if(pos.can_castle(on)){
 			Bitboard path = pos.castling_path(on);
@@ -131,7 +149,11 @@ ActMove* generate_castles(const Board& pos, ActMove* list, Side us){
 					}
 				}
 				if(passed){
-					(list++)->move = make<CASTLING>(ksq, pos.castling_rook_sq(on)); // castling is encoded as "king captures rook"
+					const Square rfrom = pos.castling_rook_sq(on);
+					const Square kto = (rfrom < ksq) ? (ksq - Square(2)) : (ksq + Square(2));
+					if((T != QUIET_CHECKS) || (pos.attacks_from<ROOK>(tksq) & ((ksq + kto) / 2))){
+						(list++)->move = make<CASTLING>(ksq, rfrom); // castling is encoded as "king captures rook"
+					}
 				}
 			}
 		}
@@ -146,7 +168,7 @@ ActMove* generate_pawns(const Board& pos, ActMove* list, Side us){
 	Bitboard pcs = pos.pieces(us, PAWN);
 	const Square delta = pawn_push(us);
 	const Square ep = pos.ep_sq();
-	const Square ksq = pos.king_sq(us);
+	const Square ksq = pos.king_sq(us), tksq = pos.king_sq(~us);
 	const Square chksq = (T == EVASIONS) ? lsb(pos.checkers()) : SQ_NONE;
 	const Bitboard ep_mask = (ep != SQ_NONE) ? SquareBB[ep] : 0;
 	while(pcs){
@@ -154,7 +176,7 @@ ActMove* generate_pawns(const Board& pos, ActMove* list, Side us){
 		const Bitboard orig = SquareBB[from];
 		// First, generate pawn captures and en passants. //
 		Bitboard possibs = 0;
-		if(T != NON_CAPTURES){ // since these are always captures
+		if((T != NON_CAPTURES) && (T != QUIET_CHECKS)){ // since these are always captures
 			possibs |= pos.attacks_from<PAWN>(from, us) & (pos.pieces(~us) | ep_mask) & (~pos.pieces(KING)); // can only be a capture or an e.p.
 		}
 		// Then, generate pawn pushes (single and double). //
@@ -165,6 +187,9 @@ ActMove* generate_pawns(const Board& pos, ActMove* list, Side us){
 			}
 			assert(!(push & pos.all()));
 			possibs |= push;
+		}
+		if(T == QUIET_CHECKS){
+			possibs &= pos.attacks_from<PAWN>(tksq, ~us) | (pos.attacks_from<KNIGHT>(tksq) & rank_bb(relative_rank(us, RANK_8))); // have to give them check (via direct or knight underpromotion)
 		}
 		// And, fill up the move list. //
 		while(possibs){
@@ -250,6 +275,15 @@ ActMove* generate_moves<NON_CAPTURES>(const Board& pos, ActMove* list){
 	list = generate_king<NON_CAPTURES>(pos, list, us);
 	list = generate_pawns<NON_CAPTURES>(pos, list, us);
 	list = generate_castles<NON_CAPTURES>(pos, list, us);
+	return list;
+}
+
+template<>
+ActMove* generate_moves<QUIET_CHECKS>(const Board& pos, ActMove* list){
+	Side us = pos.side_to_move();
+	list = generate_sliders_knight<QUIET_CHECKS>(pos, list, us);
+	list = generate_pawns<QUIET_CHECKS>(pos, list, us);
+	list = generate_castles<QUIET_CHECKS>(pos, list, us);
 	return list;
 }
 

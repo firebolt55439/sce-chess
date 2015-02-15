@@ -37,7 +37,8 @@ typedef Stats<Value> HistoryTable;
 
 class MoveSorter {
 	public:
-		MoveSorter(const Board& pos, Depth d, const HistoryTable& hst, Search::Stack* ss);
+		MoveSorter(const Board& pos, Depth d, const HistoryTable& hst, Search::Stack* ss); // for main search
+		MoveSorter(const Board& pos, Depth d, const HistoryTable& hst, Square s); // for QS search
 		
 		Move next_move(void); // get the next move we should search
 	private:
@@ -49,6 +50,7 @@ class MoveSorter {
 		Search::Stack* ss;
 		Depth depth;
 		int stage;
+		Square recap_sq;
 		// TODO: Killers
 		ActMove *cur, *end, *end_quiets, *end_bad_captures;
 		ActMove moves[MAX_MOVES];

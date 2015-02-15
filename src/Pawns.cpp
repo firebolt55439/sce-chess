@@ -52,7 +52,17 @@ const Score Lever[RANK_NB] = {
 const Score UnsupportedPawnPenalty = S(20, 10);
 
 void Pawns::init(void){
-	// TODO: Init any pawn tables needed (e.g. Connectivity, etc.)
+	static const int Seed[RANK_NB] = {
+		0, 6, 15, 10, 57, 75, 135, 258
+	}; // seed for bonuses based on pawn connectivity
+	for(int opposed = 0; opposed <= 1; opposed++){
+		for(int phalanx = 0; phalanx <= 1; phalanx++){
+			for(Rank r = RANK_2; r < RANK_8; r++){
+				int bonus = Seed[r] + (phalanx ? (Seed[r + 1] - Seed[r]) / 2 : 0);
+				Connected[opposed][phalanx][r] = make_score(bonus / 2, bonus >> opposed); // '>> opposed' is an optimization for 'divide by 2 if opposed is one'
+			}
+		}
+	}
 }
 
 template<Side Us> Score evaluate(const Board& pos, Pawns::PawnEntry* e);
@@ -133,7 +143,7 @@ Score evaluate(const Board& pos, Pawns::PawnEntry* e){
 			score -= Backward[opposed][f];
 		}
 		if(connected){
-			// TODO: Connected bonuses, etc.
+			score += Connected[opposed][phalanx][relative_rank(Us, s)];
 		}
 		if(lever){
 			score += Lever[rank_of(s)];

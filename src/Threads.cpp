@@ -88,7 +88,8 @@ void ThreadPool::start_searching(const Board& pos, const Search::SearchLimits& l
 	//printf("Main thread finished!\n");
 	// Now, start searching. //
 	Search::SearchTime = get_system_time_msec();
-	Search::Signals.stop = Search::Signals.stop_on_ponder_hit = Search::Signals.failed_low_at_root = false;
+	Search::Signals.stop = Search::Signals.stop_on_ponder_hit = false;
+	Search::Signals.failed_low_at_root = Search::Signals.first_root_move = false;
 	Search::RootMoves.clear();
 	Search::RootPos = pos;
 	Search::Limits = limits;

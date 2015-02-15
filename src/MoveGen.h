@@ -26,6 +26,7 @@ enum GenType {
 	EVASIONS, // check evasions
 	CAPTURES, // only captures
 	NON_CAPTURES, // only non-captures
+	QUIET_CHECKS, // *quiet* checks
 	LEGAL // driver
 };
 

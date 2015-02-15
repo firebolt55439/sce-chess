@@ -85,7 +85,7 @@ void TimeManager::init(const Search::SearchLimits& limits, Side us, int ply){
 		optimal_search_time += (optimal_search_time / 4); // if we are pondering, please think a bit more
 	}
 	optimal_search_time = std::min(optimal_search_time, max_search_time); // just want to make sure that optimal is <= max always
-	//printf("optimal search time: %f seconds\n", optimal_search_time / 1000.0);
+	printf("# Optimal search time: %f seconds (with %f seconds max)\n", optimal_search_time / 1000.0, max_search_time / 1000.0);
 }
 
 
