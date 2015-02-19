@@ -190,6 +190,7 @@ ActMove* generate_pawns(const Board& pos, ActMove* list, Side us){
 		}
 		if(T == QUIET_CHECKS){
 			possibs &= pos.attacks_from<PAWN>(tksq, ~us) | (pos.attacks_from<KNIGHT>(tksq) & rank_bb(relative_rank(us, RANK_8))); // have to give them check (via direct or knight underpromotion)
+			possibs &= ~pos.all(); // *quiet* checks
 		}
 		// And, fill up the move list. //
 		while(possibs){
