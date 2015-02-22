@@ -503,8 +503,7 @@ Value qsearch(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth){
 	}
 	if(InCheck && (best_score == -VAL_INF)){
 		// In check and no legal moves? Must be checkmate. //
-		// Note: Expensive check in above condition only happens
-		// if we are in check and we did not search any moves.
+		// TODO: Verify that this was not the result of pruning moves
 		return mated_in(ss->ply);
 	}
 	// TODO: TT Save

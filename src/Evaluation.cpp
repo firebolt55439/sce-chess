@@ -391,7 +391,6 @@ Value do_evaluate(const Board& pos){
 	EvalInfo ei;
 	Value nonPawnMaterial[SIDE_NB];
 	Phase game_phase;
-	// TODO: Endgames
 	// Init Eval Info //
 	ei.pe = Pawns::probe(pos);
 	init_eval_info<WHITE>(pos, ei);
@@ -409,7 +408,7 @@ Value do_evaluate(const Board& pos){
 	total_npm = std::max(EndgameLimit, std::min(MidgameLimit, total_npm));
 	game_phase = Phase(((total_npm - EndgameLimit) * PHASE_MIDGAME) / (MidgameLimit - EndgameLimit)); // scale phase b/w midgame and endgame, truncate decimal point
 	if(Verbose) printf("Game phase: %d\n", game_phase);
-	// TODO: Mobility area, space evaluation
+	// TODO: Space evaluation
 	// TODO: Threats, etc.
 	// Material Factoring //
 	const int pcounts[PIECE_TYPE_NB - 1][SIDE_NB] = {
