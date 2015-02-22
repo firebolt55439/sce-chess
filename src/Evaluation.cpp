@@ -4,6 +4,7 @@
 #include "MoveGen.h"
 #include "Evaluation.h"
 #include "Pawns.h"
+#include "Endgame.h"
 
 #define S(mg, eg) make_score(mg, eg)
 #define SS(g) make_score(g, g)
@@ -380,7 +381,13 @@ template<bool Verbose>
 Value do_evaluate(const Board& pos){
 	// Returns score relative to side to move (e.g. -200 for black to move is +200 for white to move). //
 	// Note: All helper functions should return score relative to white. //
+	// TODO: Material Hash Table
 	Score score = SCORE_ZERO, mobility_score[SIDE_NB] = { SCORE_ZERO, SCORE_ZERO };
+	bool eval_func_found = false;
+	Value pos_score = EndgameN::probe(pos, eval_func_found);
+	if(eval_func_found){
+		return pos_score;
+	}
 	EvalInfo ei;
 	Value nonPawnMaterial[SIDE_NB];
 	Phase game_phase;

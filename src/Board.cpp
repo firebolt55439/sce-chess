@@ -347,11 +347,13 @@ std::string Board::fen(void) const {
 }
 
 bool Board::is_draw(void) const {
+	// Fifty-Move Rule //
 	if(st->fifty_ct > 99 && (!checkers() || MoveList<LEGAL>(*this).size())){ 
 		// Note: Using MoveList size is OK since it is unlikely enough that
 		// the halfmove count is above 99 anyway, so it is a rare case.
 		return true; // drawn by 50-move rule
 	}
+	// Draw by Repetition //
 	BoardState* stp = st; // will be used to store previous states
 	for(int i = 2, e = std::min(st->fifty_ct, st->ply); i <= e; i += 2){
 		// Can only be the exact same during the same person's move, hence
@@ -359,6 +361,19 @@ bool Board::is_draw(void) const {
 		stp = stp->prev->prev; // find the one 1 full move ago
 		if(stp->key == st->key){
 			return true; // Drawn at first repetition
+		}
+	}
+	// Draw by insufficient material //
+	const Bitboard pcs = all();
+	if(byType[PAWN] | byType[ROOK] | byType[QUEEN]){
+		return false; // have mating material - early return
+	}
+	if(pcs == byType[KING]){
+		return true; // King vs King
+	}
+	if((pCount[WHITE][ALL_PIECES] + pCount[BLACK][ALL_PIECES]) < 4){
+		if((byType[BISHOP] | byType[KNIGHT]) & pcs){
+			return true; // King and one minor piece
 		}
 	}
 	return false;

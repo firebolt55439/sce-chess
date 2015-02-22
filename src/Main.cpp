@@ -11,6 +11,7 @@
 #include "Pawns.h"
 #include "Threads.h"
 #include "UCI.h"
+#include "Endgame.h"
 
 int main(int argc, char** argv){
 	// Initialize Everything //
@@ -22,6 +23,7 @@ int main(int argc, char** argv){
 	Search::init();
 	Threads.init();
 	UCI::init();
+	EndgameN::init();
 	// And start the UCI Loop //
 	UCI::loop(argc, argv);
 	return 0;

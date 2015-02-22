@@ -122,7 +122,7 @@ enum Bound {
 enum Value {
 	VAL_ZERO = 0,
 	VAL_DRAW = 0,
-	VAL_KNOWN_WIN = 5000,
+	VAL_KNOWN_WIN = 10000,
 	VAL_MATE = 32000,
 	VAL_INF = VAL_MATE + 1,
 	VAL_NONE = VAL_MATE + 2,
