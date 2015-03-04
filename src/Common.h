@@ -384,6 +384,13 @@ inline char file_char_of(const Square& sq){
 	return char(file_of(sq) + 'a');
 }
 
+inline std::string square_str_of(const Square& sq){
+	std::string ret;
+	ret.push_back(file_char_of(sq));
+	ret.push_back(rank_char_of(sq));
+	return ret;
+}
+
 inline std::ostream& operator<<(std::ostream& ss, const Square& sq){
 	ss << file_char_of(sq) << rank_char_of(sq);
 	return ss;

@@ -50,7 +50,7 @@ void Endgames::add(std::string code){
 }
 
 void Endgames::init(void){
-	add<KPK>("KPK");
+	//add<KPK>("KPK"); // TODO
 	add<KRK>("KRK");
 	add<KQK>("KQK");
 }

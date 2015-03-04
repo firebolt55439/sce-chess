@@ -12,13 +12,13 @@
 namespace {
 	Board MainBoard;
 	Search::BoardStateStack BSS;
-	
-	const std::string StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 }
+
+std::string ENGINE_VERSION = "v0.1";
 
 void UCI::init(void){
 	// TODO: Initialize options, etc.
-	std::cout << "Sumer's Chess Engine, v0.1 by Sumer Kohli" << std::endl;
+	std::cout << "Sumer's Chess Engine, " << ENGINE_VERSION << " by Sumer Kohli" << std::endl;
 }
 
 std::string UCI::value(Value v){
@@ -95,14 +95,10 @@ void handle_position(std::istringstream& ss){
 void UCI::loop(int argc, char** argv){
 	std::string inp = "", tok;
 	MainBoard.init_from(StartFEN);
-	std::stringstream nm;
-	nm << "uci_log_" << get_system_time_msec() << ".txt";
-	std::ofstream ofp(nm.str());
 	while(tok != "quit"){
 		inp.clear(); // clear flags
 		tok.clear();
 		std::getline(std::cin, inp);
-		if(inp.length()) ofp << inp << std::endl;
 		std::istringstream ss(inp);
 		ss >> std::skipws >> tok;
 		if(tok == "uci"){

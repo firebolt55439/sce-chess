@@ -31,6 +31,52 @@ std::string Moves::format<false>(Move m){
 	return ret;
 }
 
+template<> 
+std::string Moves::format<true>(Move m, Board& pos){
+	std::string ret = "";
+	Square from = from_sq(m), to = to_sq(m);
+	if(type_of(m) == CASTLING){
+		// NOTE: PGN uses the uppercase letter while FIDE SAN uses the digit zero.
+		if(to < from) ret = "O-O-O"; // uppercase letter
+		else ret = "O-O";
+	} else {
+		Piece pc = pos.moved_piece(m);
+		if(type_of(pc) == PAWN){
+			Square capsq = (type_of(m) == ENPASSANT) ? (to - pawn_push(pos.side_to_move())) : to;
+			if(pos.empty(capsq)){ // if not a capture (or e.p.)
+				// e.g. 'b4'
+				ret += file_char_of(to);
+				ret += rank_char_of(to);
+			} else {
+				// e.g. 'bxc3'
+				ret += file_char_of(from);
+				ret += 'x';
+				ret += file_char_of(capsq);
+				ret += rank_char_of(capsq);
+			}
+			if(type_of(m) == PROMOTION){
+				ret += '=';
+				ret += char(toupper(PieceChar[promotion_type(m)]));
+			}
+		} else {
+			ret += char(toupper(PieceChar[pc]));
+			// TODO: Conflict/Ambiguity resolution
+			if(!pos.empty(to)) ret += 'x';
+			ret += file_char_of(to);
+			ret += rank_char_of(to);
+		}
+	}
+	// Add '+', '#' as needed. //
+	BoardState st;
+	pos.do_move(m, st);
+	if(pos.checkers()){
+		if(MoveList<LEGAL>(pos).size()) ret.push_back('+');
+		else ret.push_back('#');
+	}
+	pos.undo_move(m);
+	return ret;
+}
+
 template<>
 Move Moves::parse<false>(std::string move, const Board& pos){
 	if(move.length() < 4 || move.length() > 5) return MOVE_NONE;

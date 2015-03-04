@@ -8,6 +8,7 @@
 namespace Moves {
 	void init(void);
 	template<bool Algebraic> std::string format(Move m);
+	template<bool Algebraic> std::string format(Move m, Board& pos);
 	template<bool Algebraic> Move parse(std::string move, const Board& pos);
 }
 

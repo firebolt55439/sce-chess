@@ -143,6 +143,7 @@ void search_loop(Board& pos){
 	beta = VAL_INF;
 	// TODO: TT.new_search();
 	History.clear();
+	Move last_best = MOVE_NONE;
 	while((++depth < DEPTH_MAX) && !Signals.stop && (!Limits.depth || (depth <= Limits.depth))){
 		for(size_t i = 0; i < RootMoves.size(); i++){
 			RootMoves[i].prev_score = RootMoves[i].score; // save scores from last iteration
@@ -157,18 +158,29 @@ void search_loop(Board& pos){
 				alpha = std::max(RootMoves[PVIdx].prev_score - delta, -VAL_INF);
 				beta = std::min(RootMoves[PVIdx].prev_score + delta, VAL_INF);
 			}
+			bool last_was_fail_low = false;
 			while(true){ // Aspiration window loop
+				last_was_fail_low = false;
 				best_val = search<Root>(pos, ss, alpha, beta, depth, false); // false = isCutNode
 				std::stable_sort(RootMoves.begin() + PVIdx, RootMoves.end()); // bring the new best move to the front
 				for(size_t i = 0; i < RootMoves.size(); i++){
 					RootMoves[i].insert_pv_in_tt(pos);
 				}
-				if(Signals.stop) break; // stop - no time or told to stop
+				if(Signals.stop){
+					/*
+					if(last_was_fail_low || (best_val <= alpha)){
+						if(last_best != MOVE_NONE){
+							std::swap(*RootMoves[0].pv[0], 
+					*/
+					// TODO
+					break; // stop - no time or told to stop
+				}
 				if(PVLinesNum == 1 && (best_val <= alpha || best_val >= beta) && (get_system_time_msec() - 3000 > SearchTime)){
 					// Give UCI update when failing high/low (e.g. lowerbound/upperbound). //
 					std::cout << uci_pv(pos, depth, alpha, beta) << std::endl;
 				}
 				if(best_val <= alpha){
+					last_was_fail_low = true;
 					// Failed low. //
 					// Note: Failing *LOW* at root is usually bad - means that we are in the midst of a window
 					// that's overvalued - we might be losing a lot of stuff. Therefore, we need to let time
@@ -185,7 +197,7 @@ void search_loop(Board& pos){
 					break;
 				}
 				delta += (delta / 2); // increase how quickly we increase our bounds exponentially (by a factor of 1.5)
-				// TODO: Optimize above factor (2x is too quick, 1.5x may be a bit too slow)
+				// TODO: Tune above factor (2x is too quick, 1.5x may be a bit too slow)
 				assert((alpha >= -VAL_INF) && (beta <= VAL_INF)); // just make sure
 			}
 			std::stable_sort(RootMoves.begin(), RootMoves.begin() + PVIdx + 1); // sort the lines that we have *already* searched so far
@@ -210,6 +222,7 @@ void search_loop(Board& pos){
 				else Signals.stop = true;
 			}
 		}
+		last_best = RootMoves[0].pv[0];
 	}
 }
 

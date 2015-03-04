@@ -1,5 +1,5 @@
 CXX=clang++
-CXXFLAGS=-c -std=c++11 -g -O2 -Wall -Wno-unused-function
+CXXFLAGS=-c -std=c++11 -g -O2 -Wall -Wno-unused-function -Wshadow
 LDFLAGS=-stdlib=libc++ -lpthread -g
 SOURCES=$(wildcard src/*.cpp)
 OBJECTS=$(addprefix obj/,$(notdir $(SOURCES:.cpp=.o)))

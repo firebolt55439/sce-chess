@@ -358,7 +358,9 @@ bool Board::is_draw(void) const {
 	for(int i = 2, e = std::min(st->fifty_ct, st->ply); i <= e; i += 2){
 		// Can only be the exact same during the same person's move, hence
 		// the i += 2 above.
+		if(!stp->prev) break;
 		stp = stp->prev->prev; // find the one 1 full move ago
+		if(!stp) break;
 		if(stp->key == st->key){
 			return true; // Drawn at first repetition
 		}
