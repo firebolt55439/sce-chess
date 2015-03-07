@@ -35,13 +35,16 @@ template<>
 std::string Moves::format<true>(Move m, Board& pos){
 	std::string ret = "";
 	Square from = from_sq(m), to = to_sq(m);
+	Square sqs[3], others[2];
 	if(type_of(m) == CASTLING){
 		// NOTE: PGN uses the uppercase letter while FIDE SAN uses the digit zero.
 		if(to < from) ret = "O-O-O"; // uppercase letter
 		else ret = "O-O";
 	} else {
 		Piece pc = pos.moved_piece(m);
-		if(type_of(pc) == PAWN){
+		Side us = side_of(pc);
+		const PieceType pt = type_of(pc);
+		if(pt == PAWN){
 			Square capsq = (type_of(m) == ENPASSANT) ? (to - pawn_push(pos.side_to_move())) : to;
 			if(pos.empty(capsq)){ // if not a capture (or e.p.)
 				// e.g. 'b4'
@@ -60,7 +63,38 @@ std::string Moves::format<true>(Move m, Board& pos){
 			}
 		} else {
 			ret += char(toupper(PieceChar[pc]));
-			// TODO: Conflict/Ambiguity resolution
+			Bitboard b = pos.attacks_from(pc, to) & pos.pieces(us, pt);
+			if(more_than_one(b)){ // TODO: Simplify logic
+				// OK, we have an ambiguous move.
+				sqs[0] = pop_lsb(&b);
+				sqs[1] = pop_lsb(&b);
+				bool three = (b);
+				sqs[2] = (three ? pop_lsb(&b) : SQ_NONE);
+				assert(!b);
+				assert(sqs[0] == from || sqs[1] == from || sqs[2] == from);
+				assert(sqs[0] != sqs[1] && sqs[0] != sqs[2] && sqs[1] != sqs[2]);
+				if(!three){
+					// Then file/rank depending on where they differ.
+					if(file_of(sqs[0]) != file_of(sqs[1])){
+						ret += 'a' + file_of(from);
+					} else {
+						ret += '1' + rank_of(from);
+					}
+				} else {
+					for(unsigned int i = 0, ct = 0; i < 3; i++){
+						if(sqs[i] != from) others[ct++] = sqs[i];
+					}
+					bool file_conflict = (file_of(others[0]) == file_of(from) || file_of(others[1]) == file_of(from));
+					bool rank_conflict = (rank_of(others[0]) == rank_of(from) || rank_of(others[1]) == rank_of(from));
+					if(file_conflict && rank_conflict){
+						ret += square_str_of(from); // have to put in entire square now
+					} else if(file_conflict){
+						ret += '1' + rank_of(from);
+					} else if(rank_conflict){
+						ret += 'a' + file_of(from);
+					}
+				}
+			}
 			if(!pos.empty(to)) ret += 'x';
 			ret += file_char_of(to);
 			ret += rank_char_of(to);

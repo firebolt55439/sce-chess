@@ -15,6 +15,35 @@
 #include "ICS.h"
 #include "Annotate.h"
 
+struct CommandLineArgs {
+	std::vector<std::string> args;
+	
+	CommandLineArgs(int argc, char** argv){
+		for(int i = 1; i < argc; i++){
+			args.push_back(std::string(argv[i]));
+		}
+	}
+	
+	~CommandLineArgs(void){ }
+	
+	bool contains(std::string s){
+		for(const std::string& on : args){
+			if(s == on) return true;
+		}
+		return false;
+	}
+	
+	std::string value(std::string s){
+		for(unsigned int i = 0; i < args.size(); i++){
+			const std::string& on = args[i];
+			if(s == on){
+				if((i + 1) < args.size()) return args[i + 1];
+			}
+		}
+		return "";
+	}
+};
+
 int main(int argc, char** argv){
 	// Initialize Everything //
 	Bitboards::init();
@@ -27,12 +56,14 @@ int main(int argc, char** argv){
 	UCI::init();
 	EndgameN::init();
 	Annotate::init();
+	// Command Line Arguments //
+	CommandLineArgs args(argc, argv);
 	// ICS (if/a) //
-	if(argc > 1 && std::string(argv[1]) == "-ics"){
+	if(args.contains("-ics")){
 		ICS_Settings s;
-		s.allow_unrated = false;
-		s.allow_rated = true;
-		s.allowed_types.push_back("blitz");
+		s.allow_unrated = (args.contains("-icsunrated"));
+		s.allow_rated = (args.contains("-icsrated"));
+		s.allowed_types.push_back("blitz"); // TODO: Add game types from command line
 		FICS ics(s);
 		if(ics.try_login("firebolting", "alvqqn")){
 			printf("Login failed.\n");
@@ -40,8 +71,12 @@ int main(int argc, char** argv){
 		} else {
 			printf("Logged in!\n");
 		}
-		printf("Listening-\n");
-		auto res = ics.listen(6000);
+		int sec = 6000;
+		if(args.contains("-icstime")){
+			sec = atoi(args.value("-icstime").c_str());
+		}
+		printf("Listening for %d seconds-\n", sec);
+		auto res = ics.listen(sec);
 		/*
 				  rating     RD      win    loss    draw   total   best
 		Blitz      1519     97.0      37      16       0      53   1519 (22-Oct-2014)

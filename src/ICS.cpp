@@ -11,6 +11,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <fstream>
+#include <sstream>
 
 Socket::Socket(void){
 	fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -125,6 +127,14 @@ enum PGN_Ext_Tag {
 }; // an extra/supplemental PGN tag
 */
 
+bool operator<(const ICS_GameInfo& a, const ICS_GameInfo& b){
+	return std::lexicographical_compare(a.fen.begin(), a.fen.end(), b.fen.begin(), b.fen.end());
+}
+
+bool operator==(const ICS_GameInfo& a, const ICS_GameInfo& b){
+	return (a.fen == b.fen);
+}
+
 void ICS::handle_game_result(ICS_Game rest, ICS_SeekInfo si, ICS_Results& ret){
 	// Handle Result //
 	ICS_Result res = rest.result;
@@ -154,107 +164,117 @@ void ICS::handle_game_result(ICS_Game rest, ICS_SeekInfo si, ICS_Results& ret){
 	printf("%sGame result: %s%s\n", BOLDCYAN, rstr.c_str(), RESET);
 	printf("%sGame Record (W-L-D-U): %u-%u-%u-%u%s\n", BOLDCYAN, ret.won, ret.lost, ret.drawn, ret.unknown, RESET);
 	// Create PGN //
-	auto& moves = rest.moves;
-	PGN_Writer writ;
-	PGN_Options opt;
-	opt.add(Event, "An ICS Game");
-	opt.add(Site, "Online (ICS Website)");
-	opt.add(Round, "1"); // TODO
-	// White, Black, White/Black Elo, White/Black Type, TimeControl, FEN, Mode, etc.
-	Board pos;
-	if(moves.size()){
-		const auto& gi = moves[0];
-		std::stringstream tmp;
-		pos.init_from(gi.fen);
-		bool are_white = (pos.side_to_move() == WHITE && moves[0].relation == 1) || (pos.side_to_move() != WHITE && moves[0].relation == -1); // TODO: Simplify this condition somehow
-		if(res == LOST || res == WON){ // TODO: Simplify this condition as well
-			if(res == WON){
-				if(are_white) pgnr = WhiteWin;
-				else pgnr = BlackWin;
+	if(res != UNKNOWN && res != NO_START){
+		auto& moves = rest.moves;
+		PGN_Writer writ;
+		PGN_Options opt;
+		opt.add(Event, "An ICS Game");
+		opt.add(Site, "Online (ICS Website)");
+		opt.add(Round, "1"); // TODO
+		// White, Black, White/Black Elo, White/Black Type, TimeControl, FEN, Mode, etc.
+		Board pos;
+		if(moves.size()){
+			// Remove Duplicate FEN's //
+			std::sort(moves.begin(), moves.end());
+			moves.erase(std::unique(moves.begin(), moves.end()), moves.end());
+			// Do the rest //
+			const auto& gi = moves[0];
+			std::stringstream tmp;
+			pos.init_from(gi.fen);
+			bool are_white = (pos.side_to_move() == WHITE && moves[0].relation == 1) || (pos.side_to_move() != WHITE && moves[0].relation == -1); // TODO: Simplify this condition somehow
+			if(res == LOST || res == WON){ // TODO: Simplify this condition as well
+				if(res == WON){
+					if(are_white) pgnr = WhiteWin;
+					else pgnr = BlackWin;
+				} else {
+					if(are_white) pgnr = BlackWin;
+					else pgnr = WhiteWin;
+				}
+			}
+			opt.add(White, (are_white ? username : gi.names[int(are_white)]));
+			opt.add(Black, (!are_white ? username : gi.names[int(are_white)]));
+			if(si.game_num != -1){
+				if(si.rating != -1){
+					tmp.str("");
+					tmp << si.rating;
+					opt.add((are_white ? BlackElo : WhiteElo), tmp.str());
+				}
+			}
+			// TODO: Block computer opponent seeks on ICS (with '(C)' in their names)
+			opt.add(WhiteType, (are_white ? "Computer": "ICS Player"));
+			opt.add(BlackType, (!are_white ? "Computer": "ICS Player"));
+			// ('?', '-' (none), '40/9000' (9000 seconds for 40 moves), '5+2', '*10' (total 10)
+			tmp.str("");
+			tmp << gi.base << '+' << gi.inc;
+			opt.add(TimeControl, tmp.str());
+			opt.add(FEN, StartFEN); // TODO
+			// TODO
+		}
+		writ.init(opt, pgnr);
+		std::vector<Move> conv;
+		BoardState st;
+		for(auto& on : moves){
+			on.fen = strip_fen(on.fen);
+		}
+		for(unsigned int i = 0; i < (moves.size() - 1); i++){
+			const auto& on = moves[i].fen;
+			const auto& next = moves[i + 1].fen;
+			pos.init_from(on);
+			Move m = MOVE_NONE;
+			for(MoveList<LEGAL> it(pos); *it; it++){
+				pos.do_move(*it, st);
+				const std::string cur = strip_fen(pos.fen());
+				if(cur == next){
+					m = *it;
+					break;
+				}
+				pos.undo_move(*it);
+			}
+			if(m == MOVE_NONE){
+				std::cerr << "Cannot deduce move from FEN '" << on << "' to FEN '" << next << "'.\n";
+				break; // stop conversion if cannot deduce move
+			}
+			conv.push_back(m);
+		}
+		// Dump move arr //
+		printf("const std::vector<Move> move_arr = {\n");
+		for(unsigned int i = 0; i < conv.size(); i++){
+			Move& m = conv[i];
+			std::cout << '\t';
+			std::string from = square_str_of(from_sq(m));
+			std::string to = square_str_of(to_sq(m));
+			std::transform(from.begin(), from.end(), from.begin(), ::toupper);
+			std::transform(to.begin(), to.end(), to.begin(), ::toupper);
+			if(type_of(m) == NORMAL){
+				std::cout << "make_move(SQ_" << from << ", SQ_" << to << ")";
+			} else if(type_of(m) == ENPASSANT || type_of(m) == CASTLING){
+				std::cout << "make<" << (type_of(m) == ENPASSANT ? "ENPASSANT" : "CASTLING") << ">(SQ_" << from << ", SQ_" << to << ")";
 			} else {
-				if(are_white) pgnr = BlackWin;
-				else pgnr = WhiteWin;
+				assert(type_of(m) == PROMOTION);
+				std::string name = "";
+				PieceType p = promotion_type(m);
+				if(p == KNIGHT) name = "KNIGHT";
+				else if(p == BISHOP) name = "BISHOP";
+				else if(p == ROOK) name = "ROOK";
+				else if(p == QUEEN) name = "QUEEN";
+				std::cout << "make<PROMOTION>(SQ_" << from << ", SQ_" << to << ", " << name << ")";
 			}
+			if((i + 1) < conv.size()) std::cout << ',';
+			std::cout << '\n';
 		}
-		opt.add(White, (are_white ? username : gi.names[int(are_white)]));
-		opt.add(Black, (!are_white ? username : gi.names[int(are_white)]));
-		if(si.game_num != -1){
-			if(si.rating != -1){
-				tmp.str("");
-				tmp << si.rating;
-				opt.add((are_white ? BlackElo : WhiteElo), tmp.str());
-			}
+		printf("};\n");
+		PGN_Move move;
+		for(const Move& on : conv){
+			move.enc = on;
+			move.annot = ""; // TODO: Annotate
+			writ.write(move);
 		}
-		// TODO: Block computer opponent seeks on ICS (with '(C)' in their names)
-		opt.add(WhiteType, (are_white ? "Computer": "ICS Player"));
-		opt.add(BlackType, (!are_white ? "Computer": "ICS Player"));
-		// ('?', '-' (none), '40/9000' (9000 seconds for 40 moves), '5+2', '*10' (total 10)
-		tmp.str("");
-		tmp << gi.base << '+' << gi.inc;
-		opt.add(TimeControl, tmp.str());
-		opt.add(FEN, StartFEN); // TODO
-		// TODO
+		std::string out = "\n" + writ.formatted() + "\n"; 
+		std::cout << out;
+		std::ofstream ofp("ics_log.pgn", std::ofstream::out | std::ofstream::app);
+		ofp << out;
+		ofp.close();
 	}
-	writ.init(opt, pgnr);
-	std::vector<Move> conv;
-	BoardState st;
-	for(auto& on : moves){
-		on.fen = strip_fen(on.fen);
-	}
-	for(unsigned int i = 0; i < (moves.size() - 1); i++){
-		const auto& on = moves[i].fen;
-		const auto& next = moves[i + 1].fen;
-		pos.init_from(on);
-		Move m = MOVE_NONE;
-		for(MoveList<LEGAL> it(pos); *it; it++){
-			pos.do_move(*it, st);
-			const std::string cur = strip_fen(pos.fen());
-			if(cur == next){
-				m = *it;
-				break;
-			}
-			pos.undo_move(*it);
-		}
-		if(m == MOVE_NONE){
-			std::cerr << "Cannot deduce move from FEN '" << on << "' to FEN '" << next << "'.\n";
-			break; // stop conversion if cannot deduce move
-		}
-		conv.push_back(m);
-	}
-	// Dump move arr //
-	printf("const std::vector<Move> move_arr = {\n");
-	for(unsigned int i = 0; i < conv.size(); i++){
-		Move& m = conv[i];
-		std::cout << '\t';
-		std::string from = square_str_of(from_sq(m));
-		std::string to = square_str_of(to_sq(m));
-		std::transform(from.begin(), from.end(), from.begin(), ::toupper);
-		std::transform(to.begin(), to.end(), to.begin(), ::toupper);
-		if(type_of(m) == NORMAL){
-			std::cout << "make_move(SQ_" << from << ", SQ_" << to << ")";
-		} else if(type_of(m) == ENPASSANT || type_of(m) == CASTLING){
-			std::cout << "make<" << (type_of(m) == ENPASSANT ? "ENPASSANT" : "CASTLING") << ">(SQ_" << from << ", SQ_" << to << ")";
-		} else {
-			assert(type_of(m) == PROMOTION);
-			std::string name = "";
-			PieceType p = promotion_type(m);
-			if(p == KNIGHT) name = "KNIGHT";
-			else if(p == BISHOP) name = "BISHOP";
-			else if(p == ROOK) name = "ROOK";
-			else if(p == QUEEN) name = "QUEEN";
-			std::cout << "make<PROMOTION>(SQ_" << from << ", SQ_" << to << ", " << name << ")";
-		}
-		if((i + 1) < conv.size()) std::cout << ',';
-		std::cout << '\n';
-	}
-	printf("};\n");
-	PGN_Move move;
-	for(const Move& on : conv){
-		move.enc = on;
-		move.annot = ""; // TODO: Annotate
-		writ.write(move);
-	}
-	std::cout << "\n" + writ.formatted() + "\n";
 }
 	
 int FICS::try_login(std::string user, std::string pass){
