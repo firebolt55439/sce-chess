@@ -14,6 +14,10 @@
 #include "Endgame.h"
 #include "ICS.h"
 #include "Annotate.h"
+#include "PGN.h"
+#include "Book.h"
+#include <sstream>
+#include <fstream>
 
 struct CommandLineArgs {
 	std::vector<std::string> args;
@@ -44,6 +48,24 @@ struct CommandLineArgs {
 	}
 };
 
+void Warn(std::string of){
+	std::cerr << BOLDYELLOW << "Warning: " << RESET << of << std::endl;
+}
+
+void Error(std::string msg){
+	std::cerr << BOLDRED << "Error: " << RESET << msg << std::endl;
+	::exit(1);
+}
+
+std::string ReadEntireFile(std::ifstream& ifp){
+	std::string ret;
+	ifp.seekg(0, std::ios::end);
+	ret.reserve(ifp.tellg());
+	ifp.seekg(0, std::ios::beg);
+	ret.assign((std::istreambuf_iterator<char>(ifp)), std::istreambuf_iterator<char>());
+	return ret;
+}
+
 int main(int argc, char** argv){
 	// Initialize Everything //
 	Bitboards::init();
@@ -55,6 +77,7 @@ int main(int argc, char** argv){
 	Threads.init();
 	UCI::init();
 	EndgameN::init();
+	PGN::init();
 	Annotate::init();
 	// Command Line Arguments //
 	CommandLineArgs args(argc, argv);
@@ -96,9 +119,67 @@ int main(int argc, char** argv){
 		Lightning  1247    265.4       0       2       0       2
 		*/
 		printf("Done listening.\n");
+	} else if(args.contains("-annotate")){
+		std::string inf = args.value("-annotate");
+		if(!inf.length()){
+			Error("Option '-annotate' requires an input filename.");
+		} else {
+			std::string outf = "out.pgn";
+			if(!args.contains("-out")){
+				Warn("No output file given, assuming '" + outf + "'.");
+			} else {
+				outf = args.value("-out");
+			}
+			Annotator_Options ap;
+			ap.time_per = 1000; // 1 second per move by default
+			if(args.contains("-anntime")){
+				ap.time_per = atoi(args.value("-anntime").c_str());
+			}
+			Annotate::annotate_file(inf, outf, ap);
+		}
+	} else if(args.contains("-read")){
+		std::string inf = args.value("-read");
+		if(!inf.length()){
+			Error("Option '-read' requires an input filename.");
+		} else {
+			std::ifstream ifp(inf);
+			if(!ifp.is_open()){
+				Error("Could not open input file '" + inf + "' for reading.");
+			}
+			std::string data = ReadEntireFile(ifp);
+			PGN_Reader reader;
+			reader.init(data);
+			reader.read_all();
+			bool write_out = (args.contains("-out") && args.value("-out").length());
+			std::ofstream ofp;
+			const std::string outf = (write_out ? args.value("-out") : "");
+			if(write_out){
+				ofp.open(outf);
+				if(!ofp.is_open()){
+					Error("Could not open output file '" + outf + "' for reading.");
+				}
+			}
+			std::cout << "Press [enter] to view formatted PGN output for all games read.\n";
+			if(write_out) std::cout << "(Writing PGN output to file '" + outf + "').\n";
+			getchar();
+			PGN_Writer writer;
+			std::stringstream ss;
+			for(unsigned int i = 0, e = reader.games_num(); i < e; i++){
+				PGN_Game on = reader.get_game(i);
+				writer.clear();
+				writer.init(on);
+				ss << "\n" + writer.formatted() + "\n";
+			}
+			std::cout << ss.str();
+			if(write_out){
+				ofp << ss.str();
+				ofp.close();
+			}
+		}
+	} else {
+		// Otherwise, start the UCI Loop //
+		UCI::loop(argc, argv);
 	}
-	// And start the UCI Loop //
-	UCI::loop(argc, argv);
 	return 0;
 }
 

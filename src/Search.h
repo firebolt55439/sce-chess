@@ -85,6 +85,7 @@ namespace Search {
 	extern Board RootPos;
 	extern int64_t SearchTime; // the start of the search time, in milliseconds
 	extern BoardStateStack SetupStates;
+	extern RootMove LastBest; // the last stable best line of the search
 	
 	void init(void);
 	void think(void);

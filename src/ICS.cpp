@@ -164,7 +164,7 @@ void ICS::handle_game_result(ICS_Game rest, ICS_SeekInfo si, ICS_Results& ret){
 	printf("%sGame result: %s%s\n", BOLDCYAN, rstr.c_str(), RESET);
 	printf("%sGame Record (W-L-D-U): %u-%u-%u-%u%s\n", BOLDCYAN, ret.won, ret.lost, ret.drawn, ret.unknown, RESET);
 	// Create PGN //
-	if(res != UNKNOWN && res != NO_START){
+	if(res != UNKNOWN && res != NO_START && res != STOPPED && rest.moves.size() && rest.moves[0].fen == StartFEN){
 		auto& moves = rest.moves;
 		PGN_Writer writ;
 		PGN_Options opt;
@@ -174,9 +174,9 @@ void ICS::handle_game_result(ICS_Game rest, ICS_SeekInfo si, ICS_Results& ret){
 		// White, Black, White/Black Elo, White/Black Type, TimeControl, FEN, Mode, etc.
 		Board pos;
 		if(moves.size()){
-			// Remove Duplicate FEN's //
-			std::sort(moves.begin(), moves.end());
-			moves.erase(std::unique(moves.begin(), moves.end()), moves.end());
+			/*// Remove Duplicate FEN's //
+			std::sort(moves.begin(), moves.end()); // UPDATE: Just realized how stupid this approach was...
+			moves.erase(std::unique(moves.begin(), moves.end()), moves.end());*/
 			// Do the rest //
 			const auto& gi = moves[0];
 			std::stringstream tmp;
@@ -200,7 +200,6 @@ void ICS::handle_game_result(ICS_Game rest, ICS_SeekInfo si, ICS_Results& ret){
 					opt.add((are_white ? BlackElo : WhiteElo), tmp.str());
 				}
 			}
-			// TODO: Block computer opponent seeks on ICS (with '(C)' in their names)
 			opt.add(WhiteType, (are_white ? "Computer": "ICS Player"));
 			opt.add(BlackType, (!are_white ? "Computer": "ICS Player"));
 			// ('?', '-' (none), '40/9000' (9000 seconds for 40 moves), '5+2', '*10' (total 10)
@@ -232,7 +231,16 @@ void ICS::handle_game_result(ICS_Game rest, ICS_SeekInfo si, ICS_Results& ret){
 			}
 			if(m == MOVE_NONE){
 				std::cerr << "Cannot deduce move from FEN '" << on << "' to FEN '" << next << "'.\n";
-				break; // stop conversion if cannot deduce move
+				printf("(on move #%u)\n", i);
+				if((i + 2) < moves.size()){
+					printf("Error recovery attempt performed.\n");
+					// Error recovery: let's remove the next FEN from the vector and see if it works.
+					moves.erase(moves.begin() + i + 1);
+					--i;
+					continue;
+				} else {
+					break; // stop conversion if cannot deduce move
+				}
 			}
 			conv.push_back(m);
 		}
@@ -671,13 +679,15 @@ ICS_Results FICS::listen(unsigned int seconds){
 			std::cout << "]\n";
 			if(si.rated == settings.allow_rated || !si.rated == settings.allow_unrated){
 				if(std::find(settings.allowed_types.begin(), settings.allowed_types.end(), si.type) != settings.allowed_types.end()){
-					// We can play this game! //
-					std::stringstream ss;
-					ss << "play " << si.game_num << std::endl;
-					sock << ss.str();
-					printf("%sSent gameplay request (%s).%s\n", BOLDCYAN, ss.str().substr(0, ss.str().length() - 1).c_str(), RESET);
-					ICS_Game res = do_game(""); // "" = continuation string
-					handle_game_result(res, si, ret);
+					if(si.name.find("(C)") == std::string::npos){ // we don't want to play computer opponents
+						// We can play this game! //
+						std::stringstream ss;
+						ss << "play " << si.game_num << std::endl;
+						sock << ss.str();
+						printf("%sSent gameplay request (%s).%s\n", BOLDCYAN, ss.str().substr(0, ss.str().length() - 1).c_str(), RESET);
+						ICS_Game res = do_game(""); // "" = continuation string
+						handle_game_result(res, si, ret);
+					}
 				}
 			}
 		}

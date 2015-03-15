@@ -56,8 +56,8 @@ struct MoveList {
 			return last - moves; // pointer arithmetic is overloaded to allow this
 		}
 		
-		bool contains(Move m) const {
-			for(ActMove* it(moves); it != last; it++){
+		bool contains(Move m){
+			for(ActMove* it(&moves[0]); it != last; it++){
 				if(it->move == m) return true;
 			}
 			return false;

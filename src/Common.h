@@ -396,6 +396,10 @@ inline std::ostream& operator<<(std::ostream& ss, const Square& sq){
 	return ss;
 }
 
+extern void Warn(std::string of); // display a warning
+extern void Error(std::string msg); // display a fatal error message
+extern std::string ReadEntireFile(std::ifstream& ifp); // read the entire file given the file buffer
+
 /* This is a pseudo-random number generator described in http://vigna.di.unimi.it/ftp/papers/xorshift.pdf */
 class RNG {
 	uint64_t s;

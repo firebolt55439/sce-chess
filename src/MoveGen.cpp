@@ -32,6 +32,11 @@ std::string Moves::format<false>(Move m){
 }
 
 template<> 
+std::string Moves::format<false>(Move m, Board& pos){
+	return Moves::format<false>(m);
+}
+
+template<> 
 std::string Moves::format<true>(Move m, Board& pos){
 	std::string ret = "";
 	Square from = from_sq(m), to = to_sq(m);
@@ -42,6 +47,7 @@ std::string Moves::format<true>(Move m, Board& pos){
 		else ret = "O-O";
 	} else {
 		Piece pc = pos.moved_piece(m);
+		if(pc == NO_PIECE) return "(invalid)";
 		Side us = side_of(pc);
 		const PieceType pt = type_of(pc);
 		if(pt == PAWN){
@@ -54,8 +60,8 @@ std::string Moves::format<true>(Move m, Board& pos){
 				// e.g. 'bxc3'
 				ret += file_char_of(from);
 				ret += 'x';
-				ret += file_char_of(capsq);
-				ret += rank_char_of(capsq);
+				ret += file_char_of(to);
+				ret += rank_char_of(to);
 			}
 			if(type_of(m) == PROMOTION){
 				ret += '=';
@@ -145,6 +151,135 @@ Move Moves::parse<false>(std::string move, const Board& pos){
 				return *it;
 			}
 		}
+	}
+	return MOVE_NONE;
+}
+
+template<>
+Move Moves::parse<true>(std::string move, const Board& pos){
+	if(move.length() < 2) return MOVE_NONE; // all SAN moves are at least 2 chars in length
+	for(unsigned int i = 0; i < move.length(); i++) if(isspace(move[i])) return MOVE_NONE; // cannot be any spaces
+	if(move.back() == '+' || move.back() == '#') move.pop_back(); // get rid of any basically annotation symbols (they are not very useful)
+	const Side us = pos.side_to_move();
+	if(move.length() == 2){
+		// Must be a pawn advance (e.g. e3), and can be a double pawn advance.
+		Rank r = Rank(move[1] - '1');
+		File f = File(move[0] - 'a');
+		Square to = make_square(r, f);
+		Square sq = to - pawn_push(us);
+		if(relative_rank(us, r) != RANK_4){ // must be a single pawn push
+			return make_move(sq, to);
+		}
+		if(pos.empty(sq)) return make_move(sq - pawn_push(us), to);
+		else return make_move(sq, to);
+	} else if(islower(move[0]) && (move[1] == 'x')){
+		// Must be a pawn capture (e.g. exd3), and can be an en passant capture or a promotion as well.
+		File from = File(move[0] - 'a');
+		Rank r = Rank(move[3] - '1');
+		File f = File(move[2] - 'a');
+		Square cap = make_square(r, f);
+		Square fr = make_square(rank_of(cap - pawn_push(us)), from);
+		if((cap == pos.ep_sq()) && (pos.attacks_from<PAWN>(cap, ~us) & pos.pieces(us, PAWN) & file_bb(from))){
+			assert(pos.empty(cap));
+			return make<ENPASSANT>(fr, cap);
+		}
+		assert(pos.pieces(us, PAWN) & fr);
+		if(move.find('=') != std::string::npos){
+			// It must be a capture promotion (e.g. bxc8=Q)
+			PieceType prom = NO_PIECE_TYPE;
+			char l = move.back();
+			if(l == 'N') prom = KNIGHT;
+			else if(l == 'B') prom = BISHOP;
+			else if(l == 'R') prom = ROOK;
+			else if(l == 'Q') prom = QUEEN;
+			else return MOVE_NONE; // invalid promotion piece char
+			return make<PROMOTION>(fr, cap, prom);
+		} else return make_move(fr, cap);
+	} else if(isupper(move[0]) && (PieceChar.find(move[0]) != std::string::npos)){
+		// Must be a piece move (like Nb3, Ra3d3, Qxc3, etc.)
+		PieceType pt = PieceType(PieceChar.find(move[0]));
+		if(move.length() == 3 || (move.length() == 4 && move[1] == 'x')){
+			// Nice, simple case: something like Nb3 or Kxd2.
+			unsigned int base = (move.length() == 3 ? 1 : 2); // base index
+			Rank r = Rank(move[base + 1] - '1');
+			File f = File(move[base] - 'a');
+			Square to = make_square(r, f);
+			Bitboard b = pos.attacks_from(make_piece(us, pt), to) & pos.pieces(us, pt);
+			if(!b) return MOVE_NONE; // invalid
+			if(more_than_one(b)){
+				// This is the tiresome part of PGN parsing: no ambiguity resolving when there are
+				// multiple pieces that can move to one square and one is absolutely pinned.
+				// Time to use a legal move generator...
+				for(MoveList<LEGAL> it(pos); *it; it++){
+					PieceType moved = type_of(pos.moved_piece(*it));
+					if(moved == pt && to_sq(*it) == to){
+						return *it;
+					}
+				}
+			}
+			return make_move(lsb(b), to);
+		} else {
+			if(move[1] == 'x') return MOVE_NONE; // b/c length was not 4, or would have been caught by above branch
+			if(move.length() < 4) return MOVE_NONE; // has to be at least 4 chars at this point
+			File f = File(-1);
+			Rank r = Rank(-1);
+			Square from = SQ_NONE;
+			unsigned int base = 2; // in "Naxa3", would be at 'x'
+			if(isalpha(move[1])){
+				// This should be the file of departure.
+				f = File(move[1] - 'a');
+				if(isdigit(move[2])){
+					base = 3;
+					// Then the entire square was given.
+					r = Rank(move[2] - '1');
+					from = make_square(r, f);
+				}
+			} else if(isdigit(move[1])){
+				r = Rank(move[1] - '1');
+			}
+			if(move[base] == 'x'){
+				++base;
+			}
+			if((base + 2) < move.length()) return MOVE_NONE; // not enough chars for to square
+			Square to = make_square(Rank(move[base + 1] - '1'), File(move[base] - 'a'));
+			if(from != SQ_NONE){
+				return make_move(from, to); // literally the only easy case... thanks PGN standard
+			}
+			for(MoveList<LEGAL> it(pos); *it; it++){
+				// Thanks to PGN standard, need to do this pretty much always...
+				if(type_of(pos.moved_piece(*it)) == pt && to_sq(*it) == to){
+					// Could be the move.
+					if(int(r) != -1){ // if rank was given
+						if(rank_of(from_sq(*it)) == r) return *it;
+					} else { // if file was given
+						assert(int(f) != -1);
+						if(file_of(from_sq(*it)) == f) return *it;
+					}
+				}
+			}
+		}		
+	} else if(islower(move[0]) && (move.find('=') != std::string::npos)){
+		// Must be a pawn promotion by advancing then, since we already ruled out all pawn captures - e.p. included, and regular/double pushes
+		Rank r = Rank(move[1] - '1');
+		File f = File(move[0] - 'a');
+		Square to = make_square(r, f);
+		Square sq = to - pawn_push(us);
+		char l = move.back();
+		if(PieceChar.find(l) == std::string::npos) return MOVE_NONE; // invalid promotion piece type
+		PieceType prom = PieceType(PieceChar.find(l));
+		return make<PROMOTION>(sq, to, prom);
+	} else if((move[0] == '0' || move[0] == 'O') && (move.find('-') != std::string::npos)){
+		// Must be castling - either SAN or PGN format (O-O, 0-0, O-O-O, or 0-0-0)
+		Square ksq = make_square(relative_rank(us, RANK_1), FILE_E); // where the king should be
+		Square rsq = SQ_NONE;
+		if(move == "O-O" || move == "0-0"){
+			// King-side castling.
+			rsq = make_square(relative_rank(us, RANK_1), FILE_H);
+		} else if(move == "O-O-O" || move == "0-0-0"){
+			// Queen-side castling.
+			rsq = make_square(relative_rank(us, RANK_1), FILE_A);
+		} else return MOVE_NONE;
+		return make<CASTLING>(ksq, rsq);
 	}
 	return MOVE_NONE;
 }

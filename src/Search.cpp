@@ -19,6 +19,7 @@ namespace Search {
 	Board RootPos;
 	int64_t SearchTime; // the start of the search time, in milliseconds
 	BoardStateStack SetupStates;
+	RootMove LastBest(MOVE_NONE);
 }
 
 // Search //
@@ -124,6 +125,9 @@ std::string uci_pv(const Board& pos, Depth depth, Value alpha, Value beta){
 			// window.
 			if(v >= beta) ss << " lowerbound"; // failed high, so must be higher than beta
 			else if(v <= alpha) ss << " upperbound"; // failed low, so must be lower than alpha
+			else {
+				LastBest = RootMoves[0]; // otherwise, report this as the last stable line
+			}
 		}
 		ss << " nodes " << uint64_t(0) /* TODO */ 
 		   << " nps " << uint64_t(0) << " time " << elapsed << " pv";
