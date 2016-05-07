@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Jabba1.0",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/Jabba",
+    "protocol": "uci"
+  },
+  {
+    "name": "Leonidas8.3",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/leonidas",
+    "protocol": "xboard"
+  },
+  {
+    "name": "Olithink5.3.2",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/olithink",
+    "protocol": "xboard"
+  },
+  {
+    "name": "PhalanxXXIII",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/phalanx",
+    "protocol": "xboard"
+  },
+  {
+    "name": "Rodent1.0",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/rodent",
+    "protocol": "uci"
+  },
+  {
+    "name": "Faile1.4.4",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/faile",
+    "protocol": "xboard"
+  },
+  {
+    "name": "SCE2",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/SCE2",
+    "protocol": "uci"
+  },
+  {
+    "name": "SCE",
+    "command": "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/data/engines/SCE",
+    "protocol": "uci"
+  }
+]

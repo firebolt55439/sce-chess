@@ -1,0 +1,18 @@
+-participants {SCE
+fairymax
+TSCP
+fruit
+sjeng
+}
+-tourneyType 0
+-tourneyCycles 2
+-defaultMatchGames 3
+-syncAfterRound true
+-syncAfterCycle true
+-saveGameFile "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/tournament_log_overnight.pgn"
+-loadGameFile ""
+-loadGameIndex 0
+-loadPositionFile ""
+-loadPositionIndex 1
+-rewindIndex 0
+-results "+-+* "

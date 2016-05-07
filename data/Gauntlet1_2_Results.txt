@@ -1,0 +1,12 @@
+Rank Name            Elo    +    - games score oppo. draws 
+   1 Olithink5.3.2   2373 (+373)   62   53   115   87%    49    8% 
+   2 SCE             ???? (+049)   32   32   330   54%     0    6% 
+   3 Leonidas8.3     1957 (-049)   45   46   115   38%    49    5%
+   4 Faile1.4.4      1979 (-373)   67   85   100    8%    49    5% 
+
+Perfect Quadratic Fit: (36017 x^2)/25499772+(197 x)/373+135325723/68364
+through (373, 2373), (-49, 1957), (-373, 1979)
+
+Therefore, SCE rating is ≈ 749267/373 ≈ 2008.76
+with a large error bar of unknown size
+(probably ± 80 ELO at least)

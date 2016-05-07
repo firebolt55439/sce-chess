@@ -4,6 +4,7 @@
 #include "Common.h"
 #include "Bitboards.h"
 #include "Board.h"
+#include "Book.h"
 #include <memory>
 #include <stack>
 #include <ctime>
@@ -86,6 +87,8 @@ namespace Search {
 	extern int64_t SearchTime; // the start of the search time, in milliseconds
 	extern BoardStateStack SetupStates;
 	extern RootMove LastBest; // the last stable best line of the search
+	extern Book EngineBook; // the engine book
+	extern Book_Skill EngineBookSkill; // the engine book skill (controls book selectivity, variance, "forgiveness", etc.)
 	
 	void init(void);
 	void think(void);

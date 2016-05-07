@@ -68,7 +68,6 @@ void TimeManager::init(const Search::SearchLimits& limits, Side us, int ply){
 	option name Slow Mover type spin default 80 min 10 max 1000
 	option name UCI_Chess960 type check default false
 	*/
-	const int MinThinkingTime = 20; // in milliseconds
 	optimal_search_time = max_search_time = std::max(limits.time[us], MinThinkingTime); // initially, optimal = amount of time left for us on the clock, but at least 20 milliseconds
 	const int MaxMTG = (limits.movestogo ? std::min(limits.movestogo, MoveHorizon) : MoveHorizon);
 	for(int i = 0; i < MaxMTG; i++){

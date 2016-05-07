@@ -183,7 +183,7 @@ Move Moves::parse<true>(std::string move, const Board& pos){
 			assert(pos.empty(cap));
 			return make<ENPASSANT>(fr, cap);
 		}
-		assert(pos.pieces(us, PAWN) & fr);
+		if(!(pos.pieces(us, PAWN) & fr)) return MOVE_NONE; // or something went REALLY wrong
 		if(move.find('=') != std::string::npos){
 			// It must be a capture promotion (e.g. bxc8=Q)
 			PieceType prom = NO_PIECE_TYPE;

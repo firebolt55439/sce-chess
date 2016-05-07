@@ -1,0 +1,31 @@
+-participants {SCE
+fairymax
+fruit
+sjeng
+TSCP
+}
+-seedBase 710627813
+-tourneyType 0
+-tourneyCycles 1
+-defaultMatchGames 2
+-syncAfterRound true
+-syncAfterCycle false
+-saveGameFile "/Users/sumerkohli/Documents/programming_projects/c++_crossbow_chess/tournament_log_day1pgn"
+-loadGameFile ""
+-loadGameIndex 0
+-loadPositionFile ""
+-loadPositionIndex 1
+-rewindIndex 0
+-usePolyglotBook false
+-polyglotBook ""
+-bookDepth 12
+-bookVariation 50
+-discourageOwnBooks true
+-defaultHashSize 64
+-defaultCacheSizeEGTB 4
+-ponderNextMove true
+-smpCores 1
+-mps 40
+-tc 2
+-inc -1.00
+-results "-++++-+-+--++=-++--+"

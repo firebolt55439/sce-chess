@@ -1,5 +1,5 @@
 CXX=clang++
-CXXFLAGS=-c -std=c++11 -g -O2 -Wall -Wno-unused-function -Wshadow
+CXXFLAGS=-c -std=c++11 -g -O2 -Wall -Wno-unused-function -Wshadow -fno-rtti
 LDFLAGS=-stdlib=libc++ -lpthread -g
 SOURCES=$(wildcard src/*.cpp)
 OBJECTS=$(addprefix obj/,$(notdir $(SOURCES:.cpp=.o)))
@@ -10,6 +10,7 @@ chess: $(OBJECTS)
 	$(CXX) $(LDFLAGS) $(OBJECTS) -o $(EXECUTABLE)
 	dsymutil $(EXECUTABLE)
 	cp $(EXECUTABLE) ./
+	$(CXX) $(LDFLAGS) $(OBJECTS) -o $(EXECUTABLE:.o=.dylib)
 
 obj/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@

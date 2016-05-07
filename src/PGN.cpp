@@ -96,7 +96,7 @@ void PGN_Writer::clear(void){
 
 void PGN_Writer::init(PGN_Options op, PGN_Result rt){
 	// Initialize PGN Writer with given options and result. //
-	bss = Search::BoardStateStack(new std::stack<BoardState>());
+	while(!bss.empty()) bss.pop();
 	board.init_from(StartFEN);
 	opts = op;
 	res = rt;
@@ -107,8 +107,10 @@ void PGN_Writer::init(PGN_Options op, PGN_Result rt){
 	else if(res == Draw) rstr = "1/2-1/2";
 	else if(res == Stopped) rstr = "*";
 	opts.builtin[6] = rstr; // compute result string
-	// Add Annotator //
-	opts.addl[AnnotatorStr] = "SCE " + ENGINE_VERSION;
+	// Add Annotator (if needed) //
+	if(opts.addl.find(AnnotatorStr) == opts.addl.end()){
+		opts.addl[AnnotatorStr] = "SCE " + ENGINE_VERSION;
+	}
 	// Init from custom FEN if needed. //
 	if(opts.addl.find(FEN) != opts.addl.end()){
 		board.init_from(opts.addl[FEN]);
@@ -118,7 +120,7 @@ void PGN_Writer::init(PGN_Options op, PGN_Result rt){
 		char buf[80];
 		time_t now = time(NULL);
 		struct tm time_struct = *localtime(&now);
-		strftime(buf, sizeof(buf), "%B %d, %Y", &time_struct);
+		strftime(buf, sizeof(buf), "%Y.%m.%d", &time_struct);
 		opts.add(Date, std::string(buf));
 	}
 	// Save //
@@ -176,8 +178,8 @@ void PGN_Writer::write(PGN_Move move){
 		ss << cur.str();
 	}
 	// And update the board, etc. //
-	bss->push(BoardState());
-	board.do_move(move.enc, bss->top());
+	bss.push(BoardState());
+	board.do_move(move.enc, bss.top());
 	++num;
 }
 
@@ -202,8 +204,7 @@ void PGN_Reader::clear(void){
 
 void PGN_Reader::reset(void){
 	// Reset board and BSS. //
-	bss.release(); // release current BSS
-	bss = Search::BoardStateStack(new std::stack<BoardState>()); // re-init. BSS
+	while(!bss.empty()) bss.pop(); // re-init. BSS
 	board.init_from(StartFEN); // reset board
 }
 
@@ -283,7 +284,9 @@ int PGN_Reader::parse(void){
 		}
 		if(got != -1){ // if it is a valid tag (UPDATE: no longer warning)
 			if(!(ss >> tok)) return 1;
-			if(tok.length() < 3) return 4; // invalid tag value
+			if(tok.length() < 2){
+				return 4; // invalid tag value
+			}
 			std::string val = tok.substr(1); // get rid of the leading '"'
 			if(val.find(']') == std::string::npos){
 				ss >> std::noskipws;
@@ -323,11 +326,7 @@ int PGN_Reader::parse(void){
 		// 1. a3 g6
 		if(!(ss >> tok)) return 1;
 		if(!tok.length()) return -1; // should never happen
-		if(tok.back() == '.'){
-			// It should be a move number (e.g. '12.' or '2...')
-			while(tok.back() == '.') tok.pop_back();
-			for(int i = 0; i < tok.length(); i++) if(!isdigit(tok[i])) return 5; // invalid move number
-		} else if(tok[0] == '{'){
+		if(tok[0] == '{'){
 			// It should be an annotation (e.g. '{<text that can be broken>}')
 			std::string annot = (tok.length() > 1) ? tok.substr(1) : "";
 			if(tok.back() == '}'){
@@ -342,6 +341,9 @@ int PGN_Reader::parse(void){
 				ss >> std::skipws;
 			}
 			if(moves.size()) moves.back().annot = annot; // update last move's annotation
+		} else if(tok[0] == '$'){
+			// It must be a numeric annotation glyph (NAG) - which we will add to the last move.
+			if(moves.size() && (tok.length() > 1)) moves.back().comment.emplace(atoi(tok.substr(1).c_str())); // update last move's NAG set
 		} else if(tok[0] == '('){
 			// It must be a recursive annotation variation (RAV) - which we will ignore (and skip).
 			if(tok.back() != ')'){
@@ -352,37 +354,43 @@ int PGN_Reader::parse(void){
 				}
 				ss >> std::skipws;
 			}
+		} else if(tok.back() == '.'){
+			// It should be a move number (e.g. '12.' or '2...')
+			while(tok.back() == '.') tok.pop_back();
+			for(int i = 0; i < tok.length(); i++) if(!isdigit(tok[i])) return 5; // invalid move number
 		} else {
 			// Otherwise, we assume it's a move.
 			if(tok[0] == '1' || tok[0] == '0' || tok == "*"){
 				// It should be a result, which means we are done (e.g. "0-1", "1/2-1/2", etc.)
-				if(tok != "0-1" && tok != "1-0" && tok != "1/2-1/2" && tok != "*") return 6; // invalid result token
-				if(tok == "0-1") res = BlackWin;
-				else if(tok == "1/2-1/2") res = Draw;
-				else if(tok == "1-0") res = WhiteWin;
-				else if(tok == "*") res = Stopped;
-				else assert(false);
-				break;
-			}
-			Move move = Moves::parse</*isAlgebraic=*/true>(tok, board);
-			bool ill = false;
-			if(move == MOVE_NONE || (ill = !MoveList<LEGAL>(board).contains(move))){
-				printf("%s move |%s| (#%lu), conversion failed.\n", (ill ? "Illegal" : "Invalid"), tok.c_str(), moves.size());
-				std::cout << board;
-				for(PGN_Move on : moves){
-					std::cout << Moves::format<false>(on.enc);
-					if(type_of(on.enc) == ENPASSANT) std::cout << "(e.p.)";
-					std::cout << ' ';
+				if(tok == "0-1" || tok == "1-0" || tok == "1/2-1/2" || tok == "*"){
+					if(tok == "0-1") res = BlackWin;
+					else if(tok == "1/2-1/2") res = Draw;
+					else if(tok == "1-0") res = WhiteWin;
+					else if(tok == "*") res = Stopped;
+					else assert(false);
+					break;
 				}
-				std::cout << std::endl;
-				// Conversion failed, stop.
-				return 7; // invalid/incorrectly formed move - could not parse
+			} else if(tok.find(')') == std::string::npos && !isdigit(tok[0])){
+				Move move = Moves::parse</*isAlgebraic=*/true>(tok, board);
+				bool ill = false;
+				if(move == MOVE_NONE || (ill = !MoveList<LEGAL>(board).contains(move))){
+					printf("%s move |%s| (#%lu), conversion failed.\n", (ill ? "Illegal" : "Invalid"), tok.c_str(), moves.size());
+					std::cout << board;
+					for(PGN_Move on : moves){
+						std::cout << Moves::format<false>(on.enc);
+						if(type_of(on.enc) == ENPASSANT) std::cout << "(e.p.)";
+						std::cout << ' ';
+					}
+					std::cout << std::endl;
+					// Conversion failed, stop.
+					return 7; // invalid/incorrectly formed move - could not parse
+				}
+				bss.push(BoardState());
+				board.do_move(move, bss.top());
+				PGN_Move m;
+				m.enc = move;
+				moves.push_back(m);
 			}
-			bss->push(BoardState());
-			board.do_move(move, bss->top());
-			PGN_Move m;
-			m.enc = move;
-			moves.push_back(m);
 		}
 	}
 	PGN_Game ret;
@@ -390,6 +398,9 @@ int PGN_Reader::parse(void){
 	ret.res = res;
 	ret.moves = moves;
 	games.push_back(ret);
+	if(games.size() % 500 == 0){
+		printf("Parsed 500 games.\n");
+	}
 	return 0;
 }
 

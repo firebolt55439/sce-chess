@@ -247,6 +247,12 @@ std::ostream& operator<<(std::ostream& ss, const Board& pos){
 	return (ss << "\n");
 }
 
+const char* Board::get_representation(void){
+	std::stringstream ss;
+	ss << *this;
+	return strdup(ss.str().c_str());
+}
+
 void Board::init_from(const std::string& fen){
 	// rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
 	clear();
@@ -344,6 +350,10 @@ std::string Board::fen(void) const {
 	// Full/Halfmove Counters //
 	ss << st->fifty_ct << " " << (st->ply + 1);
 	return ss.str();
+}
+
+void Board::init_from(const char* s){
+	init_from(s);
 }
 
 bool Board::is_draw(void) const {

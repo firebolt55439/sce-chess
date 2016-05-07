@@ -4,7 +4,6 @@
 #include "Common.h"
 #include "Bitboards.h"
 #include "Board.h"
-#include "Search.h"
 #include "Threads.h"
 
 extern std::string ENGINE_VERSION;

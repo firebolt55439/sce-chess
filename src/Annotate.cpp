@@ -1,9 +1,8 @@
 #include "Common.h"
-#include "Annotate.h"
 #include "Board.h"
 #include "MoveGen.h"
-#include "MoveSort.h"
 #include "UCI.h"
+#include "Annotate.h"
 #include <iomanip>
 #include <fstream>
 #include <sstream>
@@ -19,68 +18,6 @@ std::string strip_fen(std::string fen){
 	fen.pop_back(); // remove trailing space
 	return fen;
 }
-
-const std::vector<Move> move_arr = {
-        make_move(SQ_G1, SQ_F3),
-        make_move(SQ_D7, SQ_D5),
-        make_move(SQ_B1, SQ_C3),
-        make_move(SQ_E7, SQ_E6),
-        make_move(SQ_E2, SQ_E4),
-        make_move(SQ_D5, SQ_E4),
-        make_move(SQ_C3, SQ_E4),
-        make_move(SQ_G8, SQ_F6),
-        make_move(SQ_E4, SQ_F6),
-        make_move(SQ_D8, SQ_F6),
-        make_move(SQ_D2, SQ_D4),
-        make_move(SQ_F8, SQ_B4),
-        make_move(SQ_C2, SQ_C3),
-        make_move(SQ_B4, SQ_D6),
-        make_move(SQ_C1, SQ_G5),
-        make_move(SQ_F6, SQ_F5),
-        make_move(SQ_F1, SQ_D3),
-        make_move(SQ_F5, SQ_D5),
-        make_move(SQ_C3, SQ_C4),
-        make_move(SQ_D5, SQ_A5),
-        make_move(SQ_G5, SQ_D2),
-        make_move(SQ_D6, SQ_B4),
-        make_move(SQ_A2, SQ_A3),
-        make_move(SQ_B4, SQ_D2),
-        make_move(SQ_F3, SQ_D2),
-        make<CASTLING>(SQ_E8, SQ_H8),
-        make<CASTLING>(SQ_E1, SQ_H1),
-        make_move(SQ_C7, SQ_C5),
-        make_move(SQ_D2, SQ_B3),
-        make_move(SQ_A5, SQ_C7),
-        make_move(SQ_B3, SQ_C5),
-        make_move(SQ_B7, SQ_B6),
-        make_move(SQ_D3, SQ_E4),
-        make_move(SQ_B8, SQ_C6),
-        make_move(SQ_D4, SQ_D5),
-        make_move(SQ_B6, SQ_C5),
-        make_move(SQ_D5, SQ_C6),
-        make_move(SQ_F8, SQ_D8),
-        make_move(SQ_D1, SQ_E2),
-        make_move(SQ_E6, SQ_E5),
-        make_move(SQ_E4, SQ_D5),
-        make_move(SQ_C8, SQ_E6),
-        make_move(SQ_A1, SQ_D1),
-        make_move(SQ_A8, SQ_B8),
-        make_move(SQ_F1, SQ_E1),
-        make_move(SQ_E6, SQ_D5),
-        make_move(SQ_C4, SQ_D5),
-        make_move(SQ_F7, SQ_F6),
-        make_move(SQ_D1, SQ_D2),
-        make_move(SQ_D8, SQ_D6),
-        make_move(SQ_E1, SQ_C1),
-        make_move(SQ_C7, SQ_A5),
-        make_move(SQ_C1, SQ_C2),
-        make_move(SQ_B8, SQ_D8),
-        make_move(SQ_E2, SQ_C4),
-        make_move(SQ_A7, SQ_A6),
-        make_move(SQ_C4, SQ_C5),
-        make_move(SQ_D6, SQ_D5),
-        make_move(SQ_C5, SQ_A5)
-};
 
 void Annotate::init(void){
 	/*
@@ -110,6 +47,7 @@ void Annotator::clear(void){
 }
 
 // Annotator Constants //
+// TODO: Allow command-line, UCI customizability
 static const int UNCLEAR_MAX = 20; // unclear at 0.2 pawns or less
 static const int LIKELY_MAX = 60; // likely win at between 0.2 pawns and 0.6 pawns
 static const int UPPER_MAX = 110; // upper hand at between 0.6 pawns and 1.1 pawns

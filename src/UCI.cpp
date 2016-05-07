@@ -107,6 +107,8 @@ void UCI::loop(int argc, char** argv){
 			// TODO: Send more options to GUI for customizing and handle 'setoption'
 			std::cout << std::endl;
 			std::cout << "option name Ponder type check default true" << std::endl; // declare our ability to ponder for polyglot
+			std::cout << "option name OwnBook type check default true" << std::endl; // we have our own opening book now
+			std::cout << "option name UCI_LimitStrength type check default false" << std::endl; // TODO: Estimated 2008 at ± 80 ELO rating, try limiting it - but by skill parameter rather than ELO?
 			std::cout << "uciok" << std::endl;
 		} else if(tok == "isready"){
 			std::cout << "readyok" << std::endl;

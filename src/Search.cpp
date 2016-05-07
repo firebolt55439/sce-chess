@@ -8,6 +8,7 @@
 #include "Threads.h"
 #include "TimeManager.h"
 #include "UCI.h"
+#include "Book.h"
 #include <cfloat>
 #include <cmath>
 
@@ -20,6 +21,8 @@ namespace Search {
 	int64_t SearchTime; // the start of the search time, in milliseconds
 	BoardStateStack SetupStates;
 	RootMove LastBest(MOVE_NONE);
+	Book EngineBook("");
+	Book_Skill EngineBookSkill;
 }
 
 // Search //
@@ -147,7 +150,23 @@ void search_loop(Board& pos){
 	beta = VAL_INF;
 	// TODO: TT.new_search();
 	History.clear();
-	Move last_best = MOVE_NONE;
+	auto book_moves = EngineBook.results_for(RootPos);
+	if(book_moves.size()){
+		// Note: All moves returned by EngineBook.results_for(...) are guaranteed to be legal.
+		EngineBook.sort_results_by(book_moves, EngineBookSkill);
+		Book_Move& top = book_moves[0]; // this is our top pick
+		// TODO: Kibitz weights, percentages, learn, etc.?
+		if(top.bpos.get_num() > 20 || top.bpos.get_learn() > 0.0){ // this is our minimum threshold for a move to be played
+			for(size_t i = 0; i < RootMoves.size(); i++){
+				RootMoves[i].prev_score = RootMoves[i].score = VAL_ZERO;
+				if(RootMoves[i].pv[0] == top.move){
+					std::swap(RootMoves[0], RootMoves[i]);
+				}
+			}
+		}
+		Signals.stop = true;
+		std::cout << "info nodes " << uint64_t(0) << " time " << get_system_time_msec() - SearchTime << std::endl;
+	}
 	while((++depth < DEPTH_MAX) && !Signals.stop && (!Limits.depth || (depth <= Limits.depth))){
 		for(size_t i = 0; i < RootMoves.size(); i++){
 			RootMoves[i].prev_score = RootMoves[i].score; // save scores from last iteration
@@ -163,8 +182,8 @@ void search_loop(Board& pos){
 				beta = std::min(RootMoves[PVIdx].prev_score + delta, VAL_INF);
 			}
 			bool last_was_fail_low = false;
+			Value fail_low_val = VAL_ZERO;
 			while(true){ // Aspiration window loop
-				last_was_fail_low = false;
 				best_val = search<Root>(pos, ss, alpha, beta, depth, false); // false = isCutNode
 				std::stable_sort(RootMoves.begin() + PVIdx, RootMoves.end()); // bring the new best move to the front
 				for(size_t i = 0; i < RootMoves.size(); i++){
@@ -172,19 +191,33 @@ void search_loop(Board& pos){
 				}
 				if(Signals.stop){
 					/*
+					// It seems that this severely crimps the mating potential by a regression test
+					// of 50 games. Even though the newer version won 26 - 13 - 11 (W-L-D), most of the wins
+					// were done on time - the SCE w/o the following mated *FAR* more.
+					// UPDATE: Trying to do it based on score difference now
 					if(last_was_fail_low || (best_val <= alpha)){
-						if(last_best != MOVE_NONE){
-							std::swap(*RootMoves[0].pv[0], 
+						// Make sure that even if we run out of time, we don't do a possibly terrible move
+						// b/c the last move we searched was a fail low.
+						if(LastBest.pv[0] != MOVE_NONE){
+							if((fail_low_val < LastBest.score) && (abs(LastBest.score - fail_low_val) > (1 * PawnValueEg))){
+								auto found = std::find(RootMoves.begin(), RootMoves.end(), LastBest);
+								if(found != RootMoves.end()){ 
+									std::swap(*RootMoves.begin(), *found);
+								}
+							}
+						}
+					}
 					*/
-					// TODO
 					break; // stop - no time or told to stop
 				}
+				last_was_fail_low = false;
 				if(PVLinesNum == 1 && (best_val <= alpha || best_val >= beta) && (get_system_time_msec() - 3000 > SearchTime)){
 					// Give UCI update when failing high/low (e.g. lowerbound/upperbound). //
 					std::cout << uci_pv(pos, depth, alpha, beta) << std::endl;
 				}
 				if(best_val <= alpha){
 					last_was_fail_low = true;
+					fail_low_val = best_val;
 					// Failed low. //
 					// Note: Failing *LOW* at root is usually bad - means that we are in the midst of a window
 					// that's overvalued - we might be losing a lot of stuff. Therefore, we need to let time
@@ -226,7 +259,6 @@ void search_loop(Board& pos){
 				else Signals.stop = true;
 			}
 		}
-		last_best = RootMoves[0].pv[0];
 	}
 }
 
@@ -400,8 +432,8 @@ Value search(Board& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool c
 				rm.score = score;
 				rm.pv.resize(1);
 				assert((ss + 1)->pv); // make sure it is not NULL
-				for(Move* m = (ss + 1)->pv; *m != MOVE_NONE; m++){
-					rm.pv.push_back(*m);
+				for(Move* j = (ss + 1)->pv; *j != MOVE_NONE; j++){
+					rm.pv.push_back(*j);
 				}
 			} else {
 				rm.score = -VAL_INF; // we use a stable sort, so no worries about this - just to make sure it gets pushed to the end

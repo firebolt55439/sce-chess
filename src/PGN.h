@@ -3,9 +3,9 @@
 
 #include "Common.h"
 #include "Board.h"
-#include "Search.h"
 #include <map>
 #include <set>
+#include <stack>
 
 namespace PGN {
 	void init(void);
@@ -91,7 +91,7 @@ class PGN_Writer {
 	// TODO: Allow greater interoperability with PGN_Game and PGN_Reader, and more writing options
 	protected:
 		Board board; // internal board
-		Search::BoardStateStack bss; // internal BSS
+		std::stack<BoardState> bss; // internal BSS
 		PGN_Options opts; // PGN options
 		PGN_Result res; // result of game
 		int num; // starts from 0 (if even, then white to move, else black to move)
@@ -115,7 +115,7 @@ class PGN_Reader {
 	protected:
 		// Internal Variables //
 		Board board; // internal board
-		Search::BoardStateStack bss; // internal BSS
+		std::stack<BoardState> bss; // internal BSS
 		std::istringstream ss; // for reading from
 		// Parsed Game(s) //
 		std::vector<PGN_Game> games; // parsed games

@@ -229,7 +229,9 @@ inline T& operator*=(T& d, int i){ return d = T(int(d) * i); }
 #define ENABLE_FULL_OPERATORS_ON(T)                             \
 ENABLE_BASE_OPERATORS_ON(T)                                     \
 inline T& operator++(T& d){ return d = T(int(d) + 1); }        \
+inline T& operator++(T& d, int){ return ++d; } 				   \
 inline T& operator--(T& d){ return d = T(int(d) - 1); }        \
+inline T& operator--(T& d, int){ return --d; } 				   \
 inline T operator/(T d, int i){ return T(int(d) / i); }        \
 inline int operator/(T d1, T d2){ return int(d1) / int(d2); }  \
 inline T& operator/=(T& d, int i){ return d = T(int(d) / i); }
@@ -242,6 +244,7 @@ ENABLE_FULL_OPERATORS_ON(Depth)
 ENABLE_FULL_OPERATORS_ON(Square)
 ENABLE_FULL_OPERATORS_ON(File)
 ENABLE_FULL_OPERATORS_ON(Rank)
+ENABLE_FULL_OPERATORS_ON(CastlingRight)
 ENABLE_BASE_OPERATORS_ON(Score)
 
 #undef ENABLE_FULL_OPERATORS_ON
@@ -399,6 +402,7 @@ inline std::ostream& operator<<(std::ostream& ss, const Square& sq){
 extern void Warn(std::string of); // display a warning
 extern void Error(std::string msg); // display a fatal error message
 extern std::string ReadEntireFile(std::ifstream& ifp); // read the entire file given the file buffer
+extern void InitCrit(void); // initialize "critical" systems
 
 /* This is a pseudo-random number generator described in http://vigna.di.unimi.it/ftp/papers/xorshift.pdf */
 class RNG {

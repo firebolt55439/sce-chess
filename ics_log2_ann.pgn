@@ -1,0 +1,69 @@
+
+
+[Event "An ICS Game"]
+[Site "Online (ICS Website)"]
+[Date "March 07, 2015"]
+[Round "1"]
+[White "firebolting"]
+[Black "KingsExecutor"]
+[Result "1-0"]
+[BlackElo "1554"]
+[WhiteType "Computer"]
+[BlackType "ICS Player"]
+[TimeControl "5+0"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[Annotator "SCE v0.1"]
+
+1. Nf3 $2 {0.00 Nf3 Nf6 Nc3 d5 d4 e6 e3 Nc6 Bd2 Bd7 / 0.40 Nc3 Nf6 Nf3 d5 e3 Bd7 Bb5 
+a6 Bd3} Nf6 $1 {-0.15} 2. Nc3 {0.04} g6 $2 {-0.45 g6 e4 d5 exd5 Nxd5 h3 Nxc3 dxc3 Nc6 Qxd8+ 
+Kxd8 / -0.12 d5 d4 Nc6 Ne5 e6 Nxc6 bxc6 Bf4} 3. e4 d6 $2 {-0.77 d6 d4 Nc6 Be2 Bg7 O-O 
+O-O Bg5} 4. Be2 {0.69} Bg7 5. d4 {0.86} O-O 6. O-O Nc6 {-0.80} 7. d5 Ne5 8. Nxe5 dxe5 9. Be3
+ {0.56} e6 10. dxe6 {0.32} Bxe6 11. Qxd8 Rfxd8 {-0.31} 12. f3 {0.27} c6 13. a3 {0.27} a5 {-0.26} 14. Rfd1
+ {0.28} Nh5 {-0.40} 15. Bb6 Rxd1+ 16. Rxd1 Nf4 {-0.45} 17. Bf1 Bf6 18. Na4 {0.39} Be7 19. Nc5
+ {0.36} Bxc5+ 20. Bxc5 Kg7 21. Kf2 g5 {-0.53} 22. a4 {0.46} Rb8 $4 23. Bd6 1-0
+
+[Event "An ICS Game"]
+[Site "Online (ICS Website)"]
+[Date "March 07, 2015"]
+[Round "1"]
+[White "ndizvoh"]
+[Black "firebolting"]
+[Result "0-1"]
+[WhiteElo "1137"]
+[WhiteType "ICS Player"]
+[BlackType "Computer"]
+[TimeControl "10+0"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[Annotator "SCE v0.1"]
+
+1. e4 $2 {0.18 e4 d5 exd5 Nf6 Nc3 e6 d4 Nxd5 Bb5+ c6 Be2} Nc6 2. Nf3 $1 {0.31} e5 {-0.32} 3. Bc4 $2
+ {0.00 Bc4 Nf6 Nc3 Bc5 O-O d6 d3 O-O Bg5 Bg4 / 0.32 Nc3 Nf6 Bb5 a6 Bxc6 dxc6 O-O Bg4 
+d3} Nf6 4. d3 {0.10} Bb4+ {-0.11} 5. c3 $1 {0.21} Be7 6. Bxf7+ $4 Kxf7 7. Qb3+ $6 {-3.11 / -2.85 
+Nbd2 d5 h3 b6 O-O Ba6 exd5 Qxd5 Ng5+ Kg6} d5 8. Ng5+ $6 {-3.71 / -2.99 Bg5 Bg4 Nbd2 
+Nxe4 dxe4 Bxg5 Nxg5+ Qxg5 exd5} Kg6 9. O-O h6 10. Nf3 {-3.47} a5 {3.35} 11. exd5 {-3.36} Qxd5
+ 12. Qd1 $6 {-3.98 / -3.28 c4 Qd6 Re1 Bg4 Nbd2 b6 h3 Bxf3 Nxf3} Rd8 {3.74} 13. d4 exd4 14. Nh4+ $4
+ {-4.88 Nh4+ Kf7 Nd2 Be6 cxd4 Nxd4 Re1 g5 Nhf3 Nxf3+ Qxf3 Qxf3 Nxf3 / -3.70 Bf4 Qe4 
+Bxc7 dxc3 Bxd8 cxb2 Nc3 bxa1=Q Qxa1} Kh7 $6 {4.50 / 4.88 Kf7 Nf3 dxc3 Nxc3 Qxd1 Nxd1 
+Bf5 Ne3} 15. Qd3+ $6 {-4.99 / -4.50 Bf4 d3 Bxc7 Bg4 f3 Rdc8 Na3 Rxc7 fxg4} Qe4 16. Qg3 $4
+ {-7.16 Qg3 Nh5 Qxc7 Qxh4 g3 Qf6 Nd2 dxc3 bxc3 Qxc3 / -5.12 Qxe4+ Nxe4 Nf3 Bf5 cxd4 
+Nxd4 Nxd4 Rxd4 Nc3 b6} Nh5 17. Qxc7 Qxh4 18. cxd4 $4 {-8.72 cxd4 Nxd4 h3 Ne2+ Kh1 Bxh3 
+Qh2 Qxf2 Rxf2 Rd1+ Qg1 Rxg1+ Kh2 Rxc1 Rxe2 / -6.93 g3 Qf6 Bd2 d3 Na3 Bh3 Rfe1} Nxd4
+ 19. Bxh6 $4 {-12.36 Bxh6 Bd6 Qxd6 Rxd6 Be3 Qg4 h3 Qe4 / -8.72 h3 Ne2+ Kh1 Bxh3 Qh2 
+Qxf2 Rxf2 Rd1+ Qg1 Rxg1+ Kh2 Rxc1 Rxe2} Bd6 20. Qc4 $4 {-124.01 Qc4 Qxh2# / -13.06 
+Qxd6 Rxd6 Be3 Ne2+ Kh1 Neg3+ fxg3 Nxg3+ Kg1 Nxf1 Kxf1 Qxh2} Qxh2# 0-1
+
+[Event "An ICS Game"]
+[Site "Online (ICS Website)"]
+[Date "March 07, 2015"]
+[Round "1"]
+[White "Rashidm"]
+[Black "firebolting"]
+[Result "0-1"]
+[WhiteElo "1278"]
+[WhiteType "ICS Player"]
+[BlackType "Computer"]
+[TimeControl "3+0"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[Annotator "SCE v0.1"]
+
+1. e4 $2 {0.18 e4 d5 exd5 Nf6 Nc3 e6 d4 Nxd5 Bb5+ c6 Be2} 0-1

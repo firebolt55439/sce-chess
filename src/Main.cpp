@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <unistd.h>
 #include "Common.h"
 #include "Bitboards.h"
 #include "Board.h"
@@ -66,8 +67,7 @@ std::string ReadEntireFile(std::ifstream& ifp){
 	return ret;
 }
 
-int main(int argc, char** argv){
-	// Initialize Everything //
+void InitCrit(void){
 	Bitboards::init();
 	Board::init();
 	Moves::init();
@@ -75,14 +75,29 @@ int main(int argc, char** argv){
 	Pawns::init();
 	Search::init();
 	Threads.init();
-	UCI::init();
 	EndgameN::init();
+	// Not critical, per se, but useful.
 	PGN::init();
 	Annotate::init();
+}
+
+/*__attribute__((weak))*/ int main(int argc, char** argv){
+	// Initialize Everything //
+	InitCrit(); // critical sections first
+	UCI::init(); // this only kibitzes
+	// Note: Book::init() is called on a case-by-case basis (e.g. used for UCI use, in ICS, but not for annotations)
 	// Command Line Arguments //
 	CommandLineArgs args(argc, argv);
-	// ICS (if/a) //
-	if(args.contains("-ics")){
+	if(args.contains("--help") || args.contains("-h")){
+		puts("\t-ics\t\tLaunch the ICS client");
+		puts("\t-icsunrated/-icsrated\t\tSet ICS rated option");
+		puts("\t-icstime\t\tSet how long to listen for a game");
+		puts("\t-annotate FNAME\tAnnotate the given PGN game file (use -out ONAME to specify output file, -anntime To specify time per move for annotation)");
+		puts("\t-read FNAME\tRead the specified PGN game file (use -create ONAME to create a book from the file)");
+		puts("\t-readbook FNAME\tRead the specified book file and launch an interactive console");
+	} else if(args.contains("-ics")){
+		Book::init();
+		// ICS (if/a) //
 		ICS_Settings s;
 		s.allow_unrated = (args.contains("-icsunrated"));
 		s.allow_rated = (args.contains("-icsrated"));
@@ -99,7 +114,7 @@ int main(int argc, char** argv){
 			sec = atoi(args.value("-icstime").c_str());
 		}
 		printf("Listening for %d seconds-\n", sec);
-		auto res = ics.listen(sec);
+		ics.listen(sec);
 		/*
 				  rating     RD      win    loss    draw   total   best
 		Blitz      1519     97.0      37      16       0      53   1519 (22-Oct-2014)
@@ -147,6 +162,7 @@ int main(int argc, char** argv){
 				Error("Could not open input file '" + inf + "' for reading.");
 			}
 			std::string data = ReadEntireFile(ifp);
+			ifp.close();
 			PGN_Reader reader;
 			reader.init(data);
 			reader.read_all();
@@ -156,8 +172,29 @@ int main(int argc, char** argv){
 			if(write_out){
 				ofp.open(outf);
 				if(!ofp.is_open()){
-					Error("Could not open output file '" + outf + "' for reading.");
+					Error("Could not open output file '" + outf + "' for writing.");
 				}
+			}
+			bool create_book = (args.contains("-create") && args.value("-create").length());
+			if(create_book){
+				const std::string nam = args.value("-create");
+				std::ofstream bfp(nam);
+				if(!bfp.is_open()){
+					Error("Could not open book file '" + nam + "' for writing.");
+				}
+				std::cout << "Press [enter] to create the book.\n";
+				getchar();
+				Book book("");
+				for(unsigned int i = 0, e = reader.games_num(); i < e; i++){
+					PGN_Game on = reader.get_game(i);
+					printf("\r%c[0K\r", char(0x1B)); // ANSI escape sequence Esc[0K to clear the line from cursor onwards
+					printf("%u/%u - %.2f%% ", (i + 1), e, (double(i + 1) / e) * 100.0);
+					std::cout.flush();
+					book << on;
+				}
+				printf("\n");
+				bfp << book.get_book();
+				bfp.close();
 			}
 			std::cout << "Press [enter] to view formatted PGN output for all games read.\n";
 			if(write_out) std::cout << "(Writing PGN output to file '" + outf + "').\n";
@@ -176,8 +213,93 @@ int main(int argc, char** argv){
 				ofp.close();
 			}
 		}
+	} else if(args.contains("-readbook")){
+		const std::string val = args.value("-readbook");
+		std::ifstream ifp(val);
+		if(!ifp.is_open()){
+			Error("Could not open input book '" + val + "' for reading.");
+		}
+		std::cout << "Reading book...\n";
+		std::string data = ReadEntireFile(ifp);
+		std::cout << "Read book!\n";
+		Book book(data);
+		ifp.close();
+		std::cout << "Book contains " << book.get_book().size() / sizeof(Book_Position) << " positions.\n";
+		std::string str;
+		Board pos;
+		pos.init_from(StartFEN);
+		std::cout << "Type 'exit' or 'quit' to quit." << std::endl;
+		std::cout << "You can type:\n";
+		std::cout << "1. 'info' to see all moves for the current position.\n";
+		std::cout << "2. 'fen' followed by an FEN position (or just 'fen' to see the current FEN).\n";
+		std::cout << "3. 'num' to see the number of positions in the book.\n";
+		std::cout << "4. 'moves' followed by a series of moves from the last given FEN position.\n";
+		std::cout << "5. 'disp' to see the board position.\n";
+		std::cout << "Book functions (all will be prefixed by 'book' - e.g. 'book variance 0')\n";
+		std::cout << "6. [variance/forgiveness] (optional: new value from 0 - 100) - if no new value is given, it displays the requested value.\n";
+		std::cout << "(more to come)\n";
+		Book_Skill skill;
+		skill.variance = skill.forgiveness = 0;
+		while(true){
+			printf("> ");
+			std::getline(std::cin, str);
+			if(str == "exit" || str == "quit") break;
+			if(str == "num"){
+				printf("There are %lu positions in this book.\n", book.get_book().size() / sizeof(Book_Position));
+			} else if(str.find("moves") == 0){
+				std::istringstream ss(str);
+				ss >> std::skipws;
+				ss >> str;
+				while(ss >> str){
+					Move move = Moves::parse<false>(str, pos);
+					if(!MoveList<LEGAL>(pos).contains(move)){
+						Warn("Invalid move: " + str);
+					} else {
+						BoardState st;
+						pos.do_move(move, st);
+						pos.init_from(pos.fen());
+					}
+				}
+			} else if(str.find("fen") == 0){
+				if(str.length() < 5){
+					printf("FEN: %s\n", pos.fen().c_str());
+				} else {
+					pos.init_from(str.substr(4));
+				}
+			} else if(str == "info"){
+				auto res = book.results_for(pos);
+				book.sort_results_by(res, skill);
+				for(Book_Move& on : res){
+					std::cout << "Move: " << Moves::format<false>(on.move) << " (" << Moves::format<true>(on.move, pos) << ")" << std::endl;
+					printf("Count: %u\n", on.bpos.get_num());
+					printf("Learn: %f\n\n", on.bpos.get_learn());
+				}
+			} else if(str == "disp"){
+				std::cout << pos;
+			} else if(str.find("book") == 0){
+				std::istringstream ss(str);
+				ss >> std::skipws;
+				ss >> str; // "book"
+				ss >> str;
+				if(str == "variance" || str == "forgiveness"){
+					int n;
+					if(!(ss >> n)){
+						if(str == "variance") printf("Variance: %d\n", skill.variance);
+						else printf("Forgiveness: %d\n", skill.forgiveness);
+					} else {
+						if((n < 0) || (n > 100)){
+							Warn("Invalid value for book parameter - must be in range of 0 to 100.");
+						} else {
+							if(str == "variance") skill.variance = n;
+							else skill.forgiveness = n;
+						}
+					}
+				}
+			}
+		}
 	} else {
-		// Otherwise, start the UCI Loop //
+		Book::init();
+		// Start the UCI Loop //
 		UCI::loop(argc, argv);
 	}
 	return 0;

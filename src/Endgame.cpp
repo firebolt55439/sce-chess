@@ -51,7 +51,7 @@ void Endgames::add(std::string code){
 
 void Endgames::init(void){
 	//add<KPK>("KPK"); // TODO
-	add<KRK>("KRK");
+	//add<KRK>("KRK"); // TODO: fix
 	add<KQK>("KQK");
 }
 
@@ -73,25 +73,45 @@ Value Endgame<KPK>::operator()(const Board& pos) const {
 
 template<>
 Value Endgame<KRK>::operator()(const Board& pos) const {
+	/*
+	* Objectives:
+	* 1. Push weak king to rank 1.
+	* 2. If weak king is to left/right of strong king, make sure rook
+	* is not in weak king's available path.
+	* 3. Keep strong king, rook, and weak king in this top-down order, all
+	* 1 rank apart.
+	* 4. Never, ever allow the rook to be captured.
+	*/
 	// 8/1KR5/8/1k6/8/8/8/8 w - - 0 1
+	// TODO: Help it understand *all* ways to checkmate KRK if it is the weak side.
+	// Note: May just be better to leave this to regular search + eval?
 	Side us = strongSide, them = weakSide;
 	Value ret = VAL_KNOWN_WIN;
 	const Square ksq = pos.king_sq(us), tksq = pos.king_sq(them);
 	const Square rsq = lsb(pos.pieces(ROOK));
 	const Rank kr = rank_of(ksq), tkr = rank_of(tksq), rr = rank_of(rsq);
-	ret += (PushToEdges[tksq] / 4); // push the other king to the edges
-	bool lined_kings = false;
-	if(pos.side_to_move() == us){
-		if(file_of(ksq) == file_of(tksq) && distance<Rank>(ksq, tksq) == 2) lined_kings = true;
-		else if(kr == tkr && distance<File>(ksq, tksq) == 2) lined_kings = true;
-		if(lined_kings){
-			ret += 30; // bonus for lined up kings
+	const File kf = file_of(ksq), tkf = file_of(tksq), rf = file_of(rsq);
+	// 1 //
+	ret -= 3 * std::abs(tkr - RANK_1);
+	// 3 //
+	int bon = 0;
+	if(kr == (rr + 1)) ++bon;
+	if(rr == (tkr + 1)) ++bon;
+	if(kr == (rr + 2)){
+		if(rr == tkr){ 
+			++bon;
+			if(kf == tkf) bon += 2;
 		}
 	}
-	if(rr == tkr || file_of(rsq) == file_of(tksq)){
-		ret += 15; // bonus for rook check
+	ret += 10 * bon; // NEED to be in the right order (either when checking or moving)
+	// 2 //
+	if((tkf < kf && rf < tkf) || (tkf > kf && rf > tkf)){ // if rook is in other king's safe path
+		ret -= 15; // get it away IMMEDIATELY
 	}
-	ret -= 10 * bool(pos.attacks_from<KING>(tksq) & rsq); // keep our rook out of other king's range
+	// 4 //
+	if((pos.attacks_from<KING>(tksq) & rsq) && !(pos.attacks_from<KING>(ksq) & rsq) && (pos.side_to_move() == them)){
+		ret = VAL_DRAW;
+	}
 	return (pos.side_to_move() == us) ? (ret) : (-ret);
 }
 

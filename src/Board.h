@@ -46,6 +46,7 @@ class Board {
 		void remove_piece(PieceType pt, Side c, Square sq); // s.e.
 		void update_state(BoardState* st); // update a state by filling in required info and such (e.g. key, checkers, etc.)
 	public:
+		const char* get_representation(void);
 		friend std::ostream& operator<<(std::ostream&, const Board& board);
 		
 		Board(void){ clear(); }
@@ -55,6 +56,7 @@ class Board {
 		static void init(void); // set up Zobrist keys, etc.
 		
 		void init_from(const std::string& fen); // init from FEN
+		void init_from(const char* fen); // init from FEN (const char* overload)
 		std::string fen(void) const; // get FEN
 		bool is_draw(void) const; // check if the position is drawn (aside from stalemate)
 		
